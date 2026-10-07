@@ -1,105 +1,67 @@
-# ShelfSentinel
+# ShelfSentinel — working hackathon prototype
 
-## Privacy-first smart shelf operations
+Local shelf video analysis, anonymous operational events, a live dashboard, and a strict Privacy Firewall. Built from the [ShelfSentinel hackathon idea](https://github.com/shierenk-code/shelfsentinel). The original concept is preserved in `HACKATHON_IDEA.md`.
 
-ShelfSentinel helps retailers spot empty shelves and rising customer interest without creating customer-surveillance data. A camera at the shelf processes video locally and publishes only anonymous operational events.
+## Run
 
-> **The camera sees the shelf. The network sees only inventory signals.**
+Requires Node.js 20 or newer. No npm dependencies, API key, cloud service, or installation step.
 
-## The problem
-
-Empty shelves cause lost sales, while manual stock checks consume staff time. Conventional camera analytics can create an unnecessary privacy risk by retaining or transmitting shopper footage before it is blurred or deleted.
-
-Retail teams need shelf availability and interaction signals. They do not need identities, faces, video archives, or cross-visit tracking.
-
-## The solution
-
-ShelfSentinel runs computer vision on an edge device beside the shelf. It converts the live feed into a small set of anonymous retail events:
-
-| Retail question | Anonymous event |
-| --- | --- |
-| Is the shelf stocked? | `shelf_status` with `full`, `low`, or `empty` |
-| Has an item stayed unavailable? | `stockout_duration` in seconds |
-| Are shoppers engaging with this shelf? | `shelf_interaction` with an event count |
-| Is the aisle getting crowded? | `congestion` with an anonymous count |
-
-Raw frames stay on the edge device and are discarded after processing. ShelfSentinel never performs facial recognition, demographic inference, gait analysis, appearance classification, or cross-visit identification.
-
-## Privacy Firewall
-
-ShelfSentinel includes a **Privacy Firewall** between edge perception and analytics. Every event must match an allow-listed schema before it leaves the device.
-
-The firewall rejects:
-
-- Images or video frames
-- Face embeddings and biometric vectors
-- Pixel coordinates or location trails
-- Appearance descriptors
-- Persistent identifiers
-- Unexpected metadata
-
-This makes privacy a testable system property, not a deletion-policy promise.
-
-## Demo flow
-
-1. A webcam or recorded shelf feed runs locally.
-2. The edge device detects shelf status and anonymous interactions.
-3. Approved events update a live dashboard with stock, stockout, and congestion metrics.
-4. A presenter removes products from the shelf to trigger a low-stock or empty-shelf alert.
-5. The presenter runs a simulated privacy attack containing a face embedding and pixel coordinates.
-6. The Privacy Firewall blocks the event, explains the violation, and records it in the audit panel.
-7. Pausing the camera stops new events while the existing operational metrics remain available.
-
-## Architecture
-
-```text
-Camera or recorded shelf feed
-            |
-            v
-Local edge perception
-            |
-            v
-Anonymous candidate event
-            |
-            v
-Privacy Firewall -----> Rejection audit panel
-            |
-            v
-Retail dashboard and operational alerts
+```powershell
+cd path\to\shelfsentinel
+npm start
 ```
 
-## Retail value
+Open **http://127.0.0.1:8787** in Edge or Chrome. Alternatively, double-click `start.cmd` on Windows. Keep the terminal open while using the prototype. Ctrl+C stops it. To choose another port, set `PORT` before running the server.
 
-- Staff receive a low-stock alert before a shelf stays empty for long.
-- Store managers can prioritize replenishment where customer engagement is highest.
-- Aggregated signals help assess shelf availability without creating a customer-profile database.
+## Two-minute demo
 
-### Illustrative ROI model
+1. Click **Start analysis** with the synthetic demo selected. The shelf shows 100% estimated occupancy.
+2. Click **Low stock**, then **Empty**. Within about two seconds, the dashboard updates and issues replenishment alerts. Empty-shelf observation time accumulates.
+3. Click **Run privacy attack**. The edge gate blocks a synthetic embedding/coordinate payload. A deliberate API bypass probe demonstrates that the receiver also rejects it. The audit retains only a timestamp and fixed rejection reason.
+4. Inspect **What the network sees**: typed operational JSON, with no frames, coordinates, customer identifier, or appearance fields.
+5. Click **Pause**. The event stream and stockout clock stop; existing metrics remain.
 
-For a pilot, measure the reduction in time that high-selling products remain unavailable. Multiply recovered selling time by the average sales rate for that shelf. The same dashboard can track restock response time for store teams.
+The synthetic shelf is clearly labeled and supplies known empty/stocked references. It is not a claim of performance on real stockout footage.
 
-## Hackathon scope
+## Use your four supplied recordings
 
-This project demonstrates the privacy boundary and retail workflow with one physical shelf, a webcam or recorded footage, and a local dashboard. It is a proof of architecture, not a production surveillance system.
+Click **Choose recording**, select a local MP4 from the `Privacy First Hackathon` folder, and click **Start analysis**. The video remains local; the server never receives the file or its name. The seek slider allows choosing reference frames. Choosing another source starts a fresh analytics session on the next Start.
 
-A production implementation would add robust shelf detection, signed edge builds, device attestation, aggregate-data retention controls, transport monitoring, configurable shelf zones, and an independent privacy review.
+The supplied clips show product pickup/return activity with a stocked shelf. They do not provide an empty-shelf reference. They can immediately demonstrate **motion triggers**; stock status stays **Uncalibrated** until both valid references are supplied. Motion triggers are a rough interaction proxy, not a verified count of shoppers, pickups, returns, or purchases. Filenames are not used as ground truth or inputs to the detector.
 
-## Why it fits FLO 2026
+For real shelf availability:
 
-| Judging area | ShelfSentinel response |
-| --- | --- |
-| Retail value | Detects stockouts and prioritizes replenishment |
-| Privacy by design | Only anonymous, allow-listed events leave the edge device |
-| Technical innovation | Edge computer vision plus an executable privacy contract |
-| Real-world performance | Works with a normal shelf, camera, and local dashboard |
-| Explainability | Simple data flow, clear limitations, visible privacy test |
+1. Use a fixed camera and consistent lighting. Expand **Shelf zone & calibration** and bound the products using X/Y/Width/Height percentages. The coordinates stay in browser memory.
+2. Pause a recording at a visibly empty shelf and click **Capture empty**, then at the stocked shelf and click **Capture stocked**. For a webcam, physically empty/stock that shelf and capture each state.
+3. Start analysis. Changing the zone invalidates the references. References that are too similar stop classification with an explanation.
 
-## Pitch
+## What is implemented
 
-Retailers lose sales when shelves are empty, but fixing that problem should not require recording shoppers. ShelfSentinel watches a shelf locally, detects stock availability and anonymous interaction, then sends only operational events such as “snacks shelf is low” or “aisle congestion increased.”
+- Browser video decoding and processing using canvas; MP4/WebM input and webcam, without audio.
+- A 6 × 3 shelf grid. Mean RGB samples are compared with empty and stocked references. Distinguishable tiles nearer the stocked reference estimate occupancy. `empty` ≤ 15%, `low` ≤ 45%, otherwise `full`. A four-sample window smooths the result.
+- Shelf motion from changes between consecutive grid samples, with a three-second cooldown. Changes caused by lighting, products or occlusion can also trigger it.
+- Strict allow-listed event validation at the browser edge and independently at the local receiver. Unknown fields, missing fields, nested values in scalar fields, invalid types/ranges, arbitrary shelf identifiers, and oversized requests are rejected.
+- Approved/blocked totals, reason-only audit, bounded event stream, restock alerts, observation time, and anonymous motion totals.
+- Responsive dashboard, local-only server, source changes, pause/resume, seek, and video-end handling.
 
-Our Privacy Firewall is the difference. It rejects frames, faces, biometric vectors, coordinates, and identifiers before analytics can receive them. During our demo, we attack the system with forbidden data and show it being blocked live. ShelfSentinel gives stores the signals they need to restock faster without building a customer-surveillance system.
+## Privacy boundary and practical limits
 
-## Team
+The browser represents the edge device. Frames and calibration vectors are processed there. The browser retains the current preview and selected local recording object for playback; your original file remains on disk. No video is uploaded or written by this app. There are no external scripts, fonts, analytics or cloud calls. Webcam tracks stop on source change or tab close.
 
-Built for the FLO 2026 Hackathon.
+The Node server listens only on `127.0.0.1`. Operational events and fixed audit reasons are kept in process memory; restart clears them. It keeps the last 200 events and 50 receiver audit records; aggregate totals continue beyond that window. The edge retains the last 20 reason-only audit records. The explicit privacy attack uses invented test values, not genuine biometric data.
+
+This is an architecture demo, not a hardened edge appliance. A compromised browser could bypass its client validator; the receiver's strict schema remains the second boundary. Receiver rejection alone cannot prevent a malicious client from attempting transmission. Production needs signed/attested edge builds and a protected transport boundary. No face recognition, demographics, person tracking, persistent IDs or object recognition is performed. Congestion is part of the contract for future extension, but this prototype does not generate congestion events.
+
+The grid method is sensitive to lighting, occlusion and camera movement. It does not count individual products or recognize SKUs. Stockout duration measures active wall-clock observation, excluding pauses; it is not a historical duration reconstructed from a recording. The API is intended for a single local demo session without authentication. Browser refresh preserves server metrics but loses edge calibration and edge audit history.
+
+## Verify
+
+```powershell
+npm test
+```
+
+Tests cover the privacy contract, malformed/forbidden data, calibrated stock states, and receiver behavior including bypass attempts, oversized requests, origin rejection and session reset. See `VALIDATION.md` for the browser and recording checks performed on this machine.
+
+## Files
+
+`server.mjs` is the dependency-free local receiver; `public/contract.mjs` defines the firewall; `public/perception.mjs` defines the shelf classifier; `public/app.mjs` owns edge processing; `public/index.html` and `styles.css` provide the dashboard.
