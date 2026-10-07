@@ -2,7 +2,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateEvent} from './public/contract.mjs';
-const files = new Map(['index.html','styles.css','app.mjs','contract.mjs','perception.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
+const files = new Map(['index.html','styles.css','app.mjs','api.mjs','contract.mjs','perception.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
 const mime={html:'text/html',css:'text/css',mjs:'text/javascript'};
 export function createServer() {
   const state={events:[],audit:[],accepted:0,blocked:0,metrics:{interactions:0,status:null,stockoutSeconds:0}};
