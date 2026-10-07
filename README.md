@@ -15,6 +15,8 @@ Open **http://127.0.0.1:8787** in Edge or Chrome. Alternatively, double-click `s
 
 ## Two-minute demo
 
+If Start Analysis reports that the local server is unavailable, run `npm start` in this repository and keep that terminal open. The page can remain visible after the server stops, but `/api/reset` and event requests then fail. Reload `http://127.0.0.1:8787` once the server is running. Choosing a recording opens it locally; it does not upload the video.
+
 1. Click **Start analysis** with the synthetic demo selected. The shelf shows 100% estimated occupancy.
 2. Click **Low stock**, then **Empty**. Within about two seconds, the dashboard updates and issues replenishment alerts. Empty-shelf observation time accumulates.
 3. Click **Run privacy attack**. The edge gate blocks a synthetic embedding/coordinate payload. A deliberate API bypass probe demonstrates that the receiver also rejects it. The audit retains only a timestamp and fixed rejection reason.

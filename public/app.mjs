@@ -1,5 +1,6 @@
 import {validateEvent} from './contract.mjs';
 import {occupancy,stockState} from './perception.mjs';
+import {requestLocal} from './api.mjs';
 const $=id=>document.getElementById(id), canvas=$('preview'),ctx=canvas.getContext('2d'),video=$('video');
 const sample=document.createElement('canvas');sample.width=6;sample.height=3;
 const sampleCtx=sample.getContext('2d',{willReadFrequently:true});
@@ -40,7 +41,7 @@ function candidate(type,data){return {type,shelf_id:'shelf-01',timestamp:new Dat
 async function send(event){
   const verdict=validateEvent(event);
   if(!verdict.ok){localBlocks++;localAudit.unshift({timestamp:new Date().toISOString(),reason:verdict.reason});localAudit=localAudit.slice(0,20);return verdict;}
-  const res=await fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event)});
+  const res=await requestLocal('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event)});
   const reply=await res.json();if(!reply.ok)throw new Error('Receiver rejected an operational event.');return reply;
 }
 async function tick(){
@@ -62,7 +63,7 @@ async function tick(){
 }
 async function dashboard(){
   try{
-    const res=await fetch('/api/dashboard');if(!res.ok)throw new Error('Dashboard unavailable');const data=await res.json();
+    const res=await requestLocal('/api/dashboard');if(!res.ok)throw new Error('Dashboard unavailable');const data=await res.json();
     $('accepted').textContent=data.accepted;$('blocked').textContent=data.blocked+localBlocks;
     const status=data.metrics.status;
     if(status){$('stockTag').textContent=status.state==='full'?'Stocked':status.state==='low'?'Low stock':'Empty';$('occupancy').textContent=status.occupancy+'%';$('fill').style.width=status.occupancy+'%';$('alert').className='alert '+(status.state==='empty'?'danger':status.state==='low'?'warning':'');$('alert').textContent=status.state==='empty'?'Restock needed — shelf is empty.':status.state==='low'?'Stock is running low — prioritize replenishment.':'Shelf availability is healthy.';}
@@ -71,9 +72,9 @@ async function dashboard(){
     $('interactions').textContent=data.metrics.interactions;
     $('events').replaceChildren(...data.events.slice(0,12).map(e=>{const row=document.createElement('div');row.className='event';const title=document.createElement('strong');title.textContent=e.type+' · '+new Date(e.timestamp).toLocaleTimeString();row.append(title,document.createTextNode(JSON.stringify(e)));return row;}));
     $('audit').replaceChildren(...[...localAudit.map(e=>({...e,gate:'Edge'})),...data.audit.map(e=>({...e,gate:'Receiver'}))].sort((a,b)=>b.timestamp.localeCompare(a.timestamp)).slice(0,8).map(e=>{const p=document.createElement('p');p.textContent=`${new Date(e.timestamp).toLocaleTimeString()} · ${e.gate} · ${e.reason} · payload discarded`;return p;}));
-  }catch(e){error('Could not reach the local dashboard. Start the local server and reload.');}
+  }catch(e){error(e.message);}
 }
-$('start').onclick=async()=>{error();try{frame();if(refs.empty&&refs.full)occupancy(vectors(),refs.empty,refs.full);if(source!=='demo'){if(video.ended){video.currentTime=0;previous=null;recent=[];currentState=null;emptySeconds=0;lastEmit=0;}await video.play();}if(resetNeeded){if(timerBusy)throw new Error('Previous analysis is finishing. Try again in a moment.');const response=await fetch('/api/reset',{method:'POST'});if(!response.ok)throw new Error('Could not start a fresh session.');localAudit=[];localBlocks=0;$('attackResult').textContent='Ready to test the boundary.';resetNeeded=false;}running=true;lastTick=0;$('runStatus').textContent=refs.empty&&refs.full?'Analyzing locally':'Motion-only · stock uncalibrated';await tick();}catch(e){pause('Ready');error(e.message);}};
+$('start').onclick=async()=>{error();try{frame();if(refs.empty&&refs.full)occupancy(vectors(),refs.empty,refs.full);if(resetNeeded){if(timerBusy)throw new Error('Previous analysis is finishing. Try again in a moment.');const response=await requestLocal('/api/reset',{method:'POST'});if(!response.ok)throw new Error('Could not start a fresh session.');localAudit=[];localBlocks=0;$('attackResult').textContent='Ready to test the boundary.';resetNeeded=false;}if(source!=='demo'){if(video.ended){video.currentTime=0;previous=null;recent=[];currentState=null;emptySeconds=0;lastEmit=0;}await video.play();}running=true;lastTick=0;$('runStatus').textContent=refs.empty&&refs.full?'Analyzing locally':'Motion-only · stock uncalibrated';await tick();}catch(e){pause('Ready');error(e.message);}};
 $('pause').onclick=()=>pause();
 $('stockFull').onclick=()=>demoPercent=100;$('stockLow').onclick=()=>demoPercent=33;$('stockEmpty').onclick=()=>demoPercent=0;$('motion').onclick=()=>reachingUntil=performance.now()+1000;
 $('demo').onclick=()=>{stopSource();source='demo';sourceLabel('Synthetic demo');calibrateDemo();};
@@ -89,7 +90,7 @@ $('attack').onclick=async()=>{
     const attack=candidate('shelf_status',{state:'full',occupancy:100,face_embedding:[0.12,0.34],pixel_coordinates:[22,55]});
     const edge=await send(attack);
     // Explicit synthetic receiver probe, never a frame, identity or genuine biometric.
-    const receiver=await fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(attack)});
+    const receiver=await requestLocal('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(attack)});
     const verdict=await receiver.json();$('attackResult').textContent=`Edge gate: ${edge.ok?'FAILED':'BLOCKED'} · Receiver gate: ${verdict.ok?'FAILED':'BLOCKED'} — ${verdict.reason}. Only the reason is retained.`;await dashboard();
   }catch{error('Privacy test could not reach the local server.');}finally{$('attack').disabled=false;}
 };
