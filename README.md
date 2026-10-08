@@ -13,15 +13,15 @@ npm start
 
 Open http://127.0.0.1:8787/ . If that port is occupied, set `$env:PORT='8790'` before starting and open the matching address. Run `npm test` for the privacy, shelf, API, tracking, and event-rule tests.
 
-## Judge walkthrough
+## Use the product
 
-1. **Overview:** See the single story: video → local detection → anonymous event → action.
-2. **Video Analysis:** The local 21-second restocking recording is preloaded when present. Press **Start Analysis**. The first load may take a few seconds while the bundled model initializes. Alternatively press **Run guided demo** for a clearly labeled simulated shelf.
+1. **Overview:** Monitor the store feed, shelf status, people in frame, activity, and recommended action.
+2. **Video sources:** The local 21-second restocking recording is preloaded when present. Press **Start Analysis**. The first load may take a few seconds while the bundled model initializes. Alternatively press **Run guided demo** for a clearly labeled simulated shelf.
 3. **Store Zones:** Draw a rectangle to configure a shelf, queue, entrance, promotion, or ignored area. Shelf estimates require an empty and a stocked reference. The included restocking clip prepares these automatically; other footage needs manual captures.
 4. **Event Stream:** Select a row to inspect its video time, detected evidence, rule, confidence, privacy result, delivery status, and recommended action.
 5. **Privacy Inspector:** Compare the local frame with the exact outbound JSON. The JSON contains only an event type, shelf identifier, time, zone name, confidence, and value. The forbidden-payload probe demonstrates local rejection.
 6. **Operations and Insights & Actions:** Read metrics from the active session and open an action's evidence. Missing observations show “Not available from current model.”
-7. **Recovery Lab:** Trigger a labeled failure simulation. Network and stream failures buffer validated events; privacy failure blocks them. Restore to flush buffered events.
+7. **System health:** Trigger a labeled failure simulation. Network and stream failures buffer validated events; privacy failure blocks them. Restore to flush buffered events.
 
 ## Recordings
 
@@ -38,3 +38,4 @@ Frames, detector boxes, temporary track IDs, heatmap coordinates, and reference 
 `npm test` runs the unit and receiver tests. The committed browser model bundle runs without installing dependencies. To rebuild it after changing `public/model-entry.mjs`, run `npm install` and `npm run build:model`.
 
 The active app lives in `public/index.html`, `public/retail.css`, `public/retail-app.mjs`, and `public/retail-core.mjs`; `server.mjs` serves the local UI, approved model assets, included recordings, and the event API. `public/contract.mjs` is the shared privacy schema. The earlier shelf-only implementation remains in `public/app.mjs` and `public/styles.css` for reference.
+

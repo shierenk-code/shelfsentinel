@@ -5,7 +5,7 @@ import {zoneAtPoint,updateTemporaryTracks,shelfRule,safeOutbound,clamp} from './
 import {loadLocalDetector} from './model-bundle.mjs';
 
 const $=id=>document.getElementById(id),video=$('videoElement');
-const canvases={video:$('videoCanvas'),zone:$('zoneCanvas'),privacy:$('privacyCanvas')};
+const canvases={overview:$('overviewCanvas'),video:$('videoCanvas'),zone:$('zoneCanvas'),privacy:$('privacyCanvas')};
 const contexts=Object.fromEntries(Object.entries(canvases).map(([key,canvas])=>[key,canvas.getContext('2d')]));
 const sampleCanvas=document.createElement('canvas');sampleCanvas.width=6;sampleCanvas.height=3;
 const sampleContext=sampleCanvas.getContext('2d',{willReadFrequently:true});
@@ -18,7 +18,8 @@ const currentMediaTime=()=>state.source?.kind==='synthetic'?(performance.now()-s
 const zoneById=id=>state.zones.find(z=>z.id===id);
 const formatTime=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
 const formatNumber=n=>Number.isFinite(n)?String(Math.round(n)):'Not available from current model';
-const status=(message,type='info')=>{const box=$('notice');box.textContent=message;box.hidden=!message;box.className='notice '+type;};
+let noticeTimer;
+const status=(message,type='info')=>{const box=$('notice');clearTimeout(noticeTimer);box.textContent=message;box.hidden=!message;box.className='notice '+type;if(type==='info'&&message)noticeTimer=setTimeout(()=>{box.hidden=true;},5000);};
 
 function showPage(page){
   if(!$(page))return;
@@ -214,10 +215,8 @@ function runSynthetic(){
   state.syntheticPercent=0;const empty=sampleShelf(zone);state.syntheticPercent=100;const full=sampleShelf(zone);state.refs.set(zone.id,{empty,full});state.shelfPercents.set(zone.id,100);renderZones();renderAll();
   for(const [delay,percent] of [[900,68],[1900,27],[2900,0],[4800,100]])state.syntheticTimers.push(setTimeout(()=>{if(!state.running)return;state.syntheticPercent=percent;analyzeShelves();state.frames++;addSample();renderAll();if(percent===100){state.running=false;state.source.status='Complete';renderAll();}},delay));
 }
-function startGuided(){resetAnalysis(false);const item={id:crypto.randomUUID(),name:'Synthetic shelf demonstration',kind:'synthetic',status:'Ready'};state.queue=[item];state.queueIndex=0;state.source=item;$('sessionName').textContent=item.name;state.guideStep=1;showPage('video');status('Synthetic demo: simulated shelf change. Every generated metric is labeled simulated.');runSynthetic();}
-$('overviewDemo').onclick=startGuided;$('runGuided').onclick=startGuided;
-const guidePages=['overview','video','zones','video','events','privacy','events','operations','insights','recovery'];
-$('advanceGuide').onclick=()=>{state.guideStep=(state.guideStep+1)%guidePages.length;showPage(guidePages[state.guideStep]);};
+function startGuided(){resetAnalysis(false);const item={id:crypto.randomUUID(),name:'Sample shelf scenario',kind:'synthetic',status:'Ready'};state.queue=[item];state.queueIndex=0;state.source=item;$('sessionName').textContent=item.name;showPage('video');status('Sample scenario: simulated shelf change. Every generated metric is labeled simulated.');runSynthetic();}
+$('overviewDemo').onclick=startGuided;
 
 function node(tag,content,className=''){const el=document.createElement(tag);el.textContent=content;el.className=className;return el;}
 function renderEvidence(event){const box=$('eventEvidence');box.replaceChildren();if(!event){box.textContent='Select an event to inspect its evidence.';return;}for(const [label,value] of [['Event',eventTitles[event.type]],['Source',event.source],['Video time',formatTime(event.mediaTime)],['Evidence',event.why],['Rule',event.rule],['Confidence',Math.round(event.confidence*100)+'%'],['Privacy',event.privacy],['Delivery',event.status],['Recommended action',event.action||'No action required']]){const p=node('p',`${label}: ${value}`);box.append(p);}}
@@ -230,7 +229,15 @@ function renderAll(){
   const simulated=state.source?.kind==='synthetic',people=state.detected.filter(d=>d.class==='person'),objects=state.detected.filter(d=>d.class!=='person'),queue=[...state.queueCounts.values()].reduce((a,b)=>a+b,0),shelf=[...state.shelfPercents.values()][0],duration=Number.isFinite(video.duration)?video.duration:0,progress=simulated?(state.running?Math.min(99,currentMediaTime()/5*100):state.source?.status==='Complete'?100:0):duration?video.currentTime/duration*100:0;
   $('sideStatus').textContent=state.failure?`Degraded: ${state.failure}`:state.running?'Analyzing locally':state.source?'Session ready':'Local edge ready';
   $('runPill').textContent=state.failure?'DEGRADED':state.running?'ANALYZING':state.paused?'PAUSED':state.source?'READY':'IDLE';$('videoStatus').textContent=$('runPill').textContent;
-  $('overviewVideo').textContent=state.source?`${state.source.name}${simulated?' · SIMULATED':''}`:'None';$('overviewModel').textContent=state.modelStatus;$('overviewEvents').textContent=`${state.events.length} ${simulated?'simulated':'local'}`;$('overviewAction').textContent=state.events.find(e=>e.action)?.action||'None';
+  $('overviewVideo').textContent=state.source?`${state.source.name}${simulated?' · SAMPLE':''}`:'No recording selected';$('overviewModel').textContent=state.modelStatus;$('overviewEvents').textContent=String(state.events.length);
+  $('overviewSource').textContent=state.running?`${simulated?'Sample scenario':'Video'} analysis in progress. Frames remain on this device.`:state.source?`${state.source.status} · ${simulated?'SIMULATED SAMPLE':'LOCAL VIDEO'}`:'Choose a recording to start.';
+  const actionEvent=state.events.find(e=>e.action),shelfValue=Number.isFinite(shelf)?Math.round(shelf):null;
+  $('overviewShelf').textContent=shelfValue===null?'Awaiting analysis':shelfValue<=15?'Empty':shelfValue<=25?'Low stock':'Stocked';
+  $('overviewShelfDetail').textContent=shelfValue===null?'Requires calibrated shelf frames':`${shelfValue}% estimated occupancy · ${simulated?'SIMULATED':'DERIVED'}`;
+  $('overviewPeople').textContent=state.model?String(people.length):'—';$('overviewQueue').textContent=state.model&&state.zones.some(z=>z.type==='queue')?String(queue):'—';
+  $('overviewFeedStatus').textContent=state.running?'ANALYZING':state.source?.status?.toUpperCase()||'NO SOURCE';
+  $('overviewAction').textContent=actionEvent?.action||'No action needed';$('overviewActionDetail').textContent=actionEvent?`${eventTitles[actionEvent.type]} in ${actionEvent.zone} at ${formatTime(actionEvent.mediaTime)} · ${actionEvent.simulated?'SIMULATED':'DERIVED'}`:'Actions appear when analysis finds an operational issue.';
+  $('overviewActivity').replaceChildren(...(state.events.length?state.events.slice(0,4).map(e=>{const row=node('button','', 'activity-item');row.append(node('span',eventTitles[e.type]),node('small',`${e.zone} · ${formatTime(e.mediaTime)} · ${e.simulated?'SIMULATED':'VIDEO'}`));row.onclick=()=>{showPage('events');state.selectedEvidence=e;renderEvidence(e);};return row;}):[node('p','No activity yet. Start video analysis to see events.')]));
   $('progressText').textContent=`${Math.round(progress)}% processed${simulated?' · SIMULATED':''}`;$('videoProgress').value=progress;
   $('inspectFrame').textContent=state.source?`${formatTime(currentMediaTime())} · ${state.frames} analyzed samples`:'—';
   $('inspectPeople').textContent=simulated?'Not available in synthetic demo':state.model?`${people.length} · LOCAL DETECTION`:'Not available from current model';
@@ -244,7 +251,6 @@ function renderAll(){
   const provenance=simulated?'SIMULATED':state.source?'DERIVED FROM CURRENT VIDEO':'NO VIDEO';const metrics=[['Footfall',state.model?String(state.footfallIds.size):'Not available',state.model?'DERIVED · ENTRANCE ZONE':'NEEDS PERSON DETECTION'],['Shelf occupancy',Number.isFinite(shelf)?`${Math.round(shelf)}%`:'Not available',Number.isFinite(shelf)?provenance+' · CALIBRATED REFERENCES':'NEEDS EMPTY + STOCKED REFERENCES'],['Queue length',state.model&&state.zones.some(z=>z.type==='queue')?String(queue):'Not available',state.model?'DERIVED · CHECKOUT ZONE':'NEEDS PERSON DETECTION + QUEUE ZONE'],['Observed queue dwell',state.dwellSamples.length?`${Math.round(Math.max(...state.dwellSamples))} s`:'Not available',state.dwellSamples.length?provenance:'NO WAIT OBSERVED'],['Operational alerts',String(state.events.filter(e=>e.action).length),provenance],['Anonymous events',String(state.events.length),provenance]];$('metricGrid').replaceChildren(...metrics.map(m=>metric(...m)));renderCharts();
   $('layoutLegend').replaceChildren(...(state.zones.length?state.zones.map(z=>node('p',`${z.name} · ${z.type} · ${z.type==='shelf'?(state.shelfPercents.has(z.id)?Math.round(state.shelfPercents.get(z.id))+'% stocked':'needs references'):z.type==='queue'?(state.model?(state.queueCounts.get(z.id)||0)+' people':'needs model'):'configured'}`)): [node('p','Configure zones to see local traffic and alert status.')]));
   const actions=state.events.filter(e=>e.action);$('insightList').replaceChildren(...(actions.length?actions.slice(0,10).map(e=>{const card=node('div','', 'panel');card.append(node('h2',eventTitles[e.type]),node('p',e.action),node('small',`${e.zone} · ${formatTime(e.mediaTime)} · ${e.simulated?'SIMULATED':'DERIVED'}`));const button=node('button','View evidence');button.onclick=()=>{showPage('events');state.selectedEvidence=e;renderEvidence(e);};card.append(button);return card;}):[node('div','No recommendation yet. Run analysis to generate evidence based actions.','panel')]));
-  $('guideSteps').querySelectorAll('li').forEach((li,i)=>li.classList.toggle('active',i===Math.max(0,state.guideStep-1)));
 }
 $('inspectPayload').onclick=()=>{showPage('privacy');$('outboundPayload').scrollIntoView({behavior:'smooth',block:'center'});};
 $('privacyProbe').onclick=async()=>{const invalid={type:'retail_signal',shelf_id:'shelf-01',timestamp:new Date().toISOString(),event:'SHELF_LOW',zone:'Shelf A',confidence:80,value:20,forbidden_test_field:'synthetic probe'};const check=validateEvent(invalid);state.privacyViolations++;try{const response=await fetch('/api/events',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(invalid)});const result=await response.json();$('privacyAudit').textContent=`Edge: ${check.reason}. Receiver: ${result.reason||response.status}. Synthetic test field was rejected; no person data used.`;status(`Privacy boundary test: edge and receiver rejected ${check.reason}.`);}catch{$('privacyAudit').textContent=`Edge: ${check.reason}. Receiver unavailable. No person data used.`;status('Local privacy check passed; receiver unavailable.','warning');}};
