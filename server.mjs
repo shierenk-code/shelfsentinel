@@ -1,8 +1,13 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
+import {existsSync} from 'node:fs';
+import {stat} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateEvent} from './public/contract.mjs';
-const files = new Map(['index.html','styles.css','app.mjs','api.mjs','contract.mjs','perception.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
+import {recordings} from './public/recordings.mjs';
+const files = new Map(['index.html','styles.css','app.mjs','api.mjs','contract.mjs','perception.mjs','recordings.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
+const media = new Map(recordings.map(item=>['/recordings/'+item.file,new URL('./public/recordings/'+item.file,import.meta.url)]).filter(([,path])=>existsSync(path)));
 const mime={html:'text/html',css:'text/css',mjs:'text/javascript'};
 export function createServer() {
   const state={events:[],audit:[],accepted:0,blocked:0,metrics:{interactions:0,status:null,stockoutSeconds:0,alertsResolved:0,lastResponseSeconds:null},alert:null};
@@ -12,6 +17,7 @@ export function createServer() {
     const origin=req.headers.origin;
     if(origin && origin !== `http://${req.headers.host}`) return json(403,{error:'ORIGIN_DENIED'});
     if(req.method==='GET' && req.url==='/api/dashboard') return json(200,state);
+    if(req.method==='GET' && req.url==='/api/recordings') return json(200,{available:recordings.filter(item=>media.has('/recordings/'+item.file)).map(item=>item.id)});
     if(req.method==='POST' && ['/api/reset','/api/acknowledge'].includes(req.url) && (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length']!=='0'))) {audit('UNEXPECTED_ACTION_BODY');return json(413,{ok:false,reason:'UNEXPECTED_ACTION_BODY'});}
     if(req.method==='POST' && req.url==='/api/reset') {state.events=[];state.audit=[];state.accepted=0;state.blocked=0;state.metrics={interactions:0,status:null,stockoutSeconds:0,alertsResolved:0,lastResponseSeconds:null};state.alert=null;return json(200,{ok:true});}
     if(req.method==='POST' && req.url==='/api/acknowledge') {
@@ -47,6 +53,25 @@ export function createServer() {
     }
     if(req.method==='GET' && files.has(req.url)) {
       try {const path=files.get(req.url);res.writeHead(200,{'Content-Type':mime[path.pathname.split('.').pop()], 'Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'X-Content-Type-Options':'nosniff'}); res.end(await readFile(path));return;}catch{return json(500,{error:'FILE_UNAVAILABLE'});}
+    }
+    if((req.method==='GET'||req.method==='HEAD') && media.has(req.url)) {
+      try {
+        const path=media.get(req.url),size=(await stat(path)).size;
+        const range=req.headers.range;
+        let start=0,end=size-1,status=200;
+        if(range){
+          const match=/^bytes=(\d+)-(\d*)$/.exec(range);
+          if(!match) {res.writeHead(416,{'Content-Range':`bytes */${size}`});res.end();return;}
+          start=Number(match[1]);end=match[2]?Number(match[2]):size-1;
+          if(start>=size||end<start||end>=size){res.writeHead(416,{'Content-Range':`bytes */${size}`});res.end();return;}
+          status=206;
+        }
+        const headers={'Content-Type':'video/mp4','Content-Length':end-start+1,'Accept-Ranges':'bytes','Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'};
+        if(status===206)headers['Content-Range']=`bytes ${start}-${end}/${size}`;
+        res.writeHead(status,headers);
+        if(req.method==='HEAD')res.end();else createReadStream(path,{start,end}).pipe(res);
+        return;
+      }catch{return json(500,{error:'RECORDING_UNAVAILABLE'});}
     }
     json(404,{error:'NOT_FOUND'});
   });

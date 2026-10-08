@@ -17,7 +17,7 @@ Open **http://127.0.0.1:8787** in Edge or Chrome. Alternatively, double-click `s
 
 If Start Analysis reports that the local server is unavailable, run `npm start` in this repository and keep that terminal open. The page can remain visible after the server stops, but `/api/reset` and event requests then fail. Reload `http://127.0.0.1:8787` once the server is running. Choosing a recording opens it locally; it does not upload the video.
 
-1. Click **Start analysis** with the synthetic demo selected. The shelf shows 100% estimated occupancy.
+1. Click **Run 15-second demo**. The shelf becomes low, then empty, then stocked again. Watch the staff task open and close.
 2. Click **Low stock**, then **Empty**. Within about two seconds, the dashboard updates and issues replenishment alerts. Empty-shelf observation time accumulates.
 3. Click **Run privacy attack**. The edge gate blocks a synthetic embedding/coordinate payload. A deliberate API bypass probe demonstrates that the receiver also rejects it. The audit retains only a timestamp and fixed rejection reason.
 4. Inspect **What the network sees**: typed operational JSON, with no frames, coordinates, customer identifier, or appearance fields.
@@ -29,11 +29,13 @@ See [SHOWCASE.md](SHOWCASE.md) for a judging walkthrough, physical shelf test pr
 
 The synthetic shelf is clearly labeled and supplies known empty/stocked references. It is not a claim of performance on real stockout footage.
 
-## Use your four supplied recordings
+## Included recording library
 
-Click **Choose recording**, select a local MP4 from the `Privacy First Hackathon` folder, and click **Start analysis**. The video remains local; the server never receives the file or its name. The seek slider allows choosing reference frames. Choosing another source starts a fresh analytics session on the next Start.
+The code-only GitHub repository starts with a self-contained synthetic demo. On this machine, all ten supplied MP4s are in `public/recordings` and appear in the page's recording library. Video files are ignored by Git and are not part of the public code release. The 21-second **Restock the middle shelf** clip loads by default when available, with its shelf zone and empty/stocked reference frames prepared automatically. Click **Start analysis** to see an empty-shelf alert followed by replenishment. Use the selector and **Load recording** to switch clips. **Choose another local file** works without copying footage into the project.
 
-The supplied clips show product pickup/return activity with a stocked shelf. They do not provide an empty-shelf reference. They can immediately demonstrate **motion triggers**; stock status stays **Uncalibrated** until both valid references are supplied. Motion triggers are a rough interaction proxy, not a verified count of shoppers, pickups, returns, or purchases. Filenames are not used as ground truth or inputs to the detector.
+The other recordings need manual calibration if they do not contain a clear empty and stocked view. The original four pickup clips show pickup/return activity but do not prove an empty shelf. They can demonstrate **motion triggers**. Motion triggers are a rough interaction proxy, not a verified count of shoppers, pickups, returns, or purchases. Filenames are not used as ground truth or inputs to the detector.
+
+Local files in `public/recordings` are served by the local app but excluded from the public Git repository. If raw videos are ever deliberately published, anyone with repository access can download them; use consent-cleared demo footage only. The privacy firewall governs analytics events sent from the browser to the local dashboard. It does not anonymize raw footage.
 
 For real shelf availability:
 
@@ -55,7 +57,7 @@ For real shelf availability:
 
 ## Privacy boundary and practical limits
 
-The browser represents the edge device. Frames and calibration vectors are processed there. The browser retains the current preview and selected local recording object for playback; your original file remains on disk. No video is uploaded or written by this app. There are no external scripts, fonts, analytics or cloud calls. Webcam tracks stop on source change or tab close.
+The browser represents the edge device. Frames and calibration vectors are processed there. A locally selected file or webcam is not uploaded by the app. Any recordings placed in `public/recordings` are served locally to the browser for playback. No video frames are sent to the analytics API. There are no external scripts, fonts, analytics or cloud calls. Webcam tracks stop on source change or tab close.
 
 The Node server listens only on `127.0.0.1`. Operational events and fixed audit reasons are kept in process memory; restart clears them. It keeps the last 200 events and 50 receiver audit records; aggregate totals continue beyond that window. The edge retains the last 20 reason-only audit records. The explicit privacy attack uses invented test values, not genuine biometric data.
 

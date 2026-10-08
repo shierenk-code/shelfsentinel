@@ -1,12 +1,15 @@
 import {validateEvent} from './contract.mjs';
 import {occupancy,stockState,createStockTracker,localizedMotion} from './perception.mjs';
 import {requestLocal} from './api.mjs';
+import {recordings} from './recordings.mjs';
 const $=id=>document.getElementById(id), canvas=$('preview'),ctx=canvas.getContext('2d'),video=$('video');
 const sample=document.createElement('canvas');sample.width=6;sample.height=3;
 const sampleCtx=sample.getContext('2d',{willReadFrequently:true});
 let source='demo',demoPercent=100,reachingUntil=0,obstructUntil=0,running=false,refs={},stream=null,objectURL=null,previous=null;
 let currentState=null,emptySeconds=0,lastMotion=0,lastTick=0,lastEmit=0,recent=[],localAudit=[],localBlocks=0,timerBusy=false,resetNeeded=true;
 let latestEstimate=null,labels=[];
+let includedRecording=null,sourceGeneration=0;
+let guidedTimers=[];
 const tracker=createStockTracker();
 let observationIssue='';
 const roi=()=>({x:Number($('roiX').value)/100,y:Number($('roiY').value)/100,w:Number($('roiW').value)/100,h:Number($('roiH').value)/100});
@@ -46,8 +49,8 @@ function calibrationText(){
   }
   $('start').disabled=false;
 }
-function pause(message='Paused · metrics retained'){running=false;video.pause();$('runStatus').textContent=message;lastTick=0;}
-function stopSource(){pause('Ready');if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;video.removeAttribute('src');video.load();if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;refs={};previous=null;recent=[];currentState=null;latestEstimate=null;labels=[];tracker.reset();observationIssue='';obstructUntil=0;renderValidation();renderTiles();emptySeconds=0;lastEmit=0;lastMotion=0;resetNeeded=true;$('seek').disabled=true;error();}
+function pause(message='Paused · metrics retained'){running=false;video.pause();for(const timer of guidedTimers)clearTimeout(timer);guidedTimers=[];$('runStatus').textContent=message;lastTick=0;}
+function stopSource(){sourceGeneration++;includedRecording=null;pause('Ready');if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;video.removeAttribute('src');video.load();if(objectURL)URL.revokeObjectURL(objectURL);objectURL=null;refs={};previous=null;recent=[];currentState=null;latestEstimate=null;labels=[];tracker.reset();observationIssue='';obstructUntil=0;renderValidation();renderTiles();emptySeconds=0;lastEmit=0;lastMotion=0;resetNeeded=true;$('seek').disabled=true;error();}
 function sourceLabel(text){$('sourceBadge').textContent=text;$('demoControls').hidden=source!=='demo';}
 function candidate(type,data){return {type,shelf_id:'shelf-01',timestamp:new Date().toISOString(),...data};}
 async function send(event){
@@ -106,12 +109,37 @@ $('start').onclick=async()=>{error();try{frame();if(refs.empty&&refs.full)occupa
 $('pause').onclick=()=>pause();
 $('acknowledge').onclick=async()=>{try{const response=await requestLocal('/api/acknowledge',{method:'POST'});if(!response.ok)throw new Error('No open alert to acknowledge.');await dashboard();}catch(e){error(e.message);}};
 $('stockFull').onclick=()=>demoPercent=100;$('stockLow').onclick=()=>demoPercent=33;$('stockEmpty').onclick=()=>demoPercent=0;$('motion').onclick=()=>reachingUntil=performance.now()+1000;$('obstruct').onclick=()=>obstructUntil=performance.now()+4000;
-$('demo').onclick=()=>{stopSource();source='demo';sourceLabel('Synthetic demo');calibrateDemo();};
-$('file').onchange=()=>{const file=$('file').files[0];if(!file)return;stopSource();source='recording';sourceLabel('Local recording');objectURL=URL.createObjectURL(file);video.src=objectURL;calibrationText();$('runStatus').textContent='Capture empty & stocked reference frames';};
-video.onloadedmetadata=()=>{if(source==='recording'){$('seek').disabled=false;video.currentTime=0;}};
+$('demo').onclick=()=>{stopSource();source='demo';sourceLabel('Synthetic demo');$('previewLabel').textContent='SYNTHETIC VIDEO · ANALYSIS LOCAL';$('recordingInfo').textContent='Choose from the recordings included with this project.';calibrateDemo();};
+$('file').onchange=()=>{const file=$('file').files[0];if(!file)return;stopSource();source='recording';sourceLabel('Local recording');$('previewLabel').textContent='LOCAL FILE · NEVER UPLOADED';$('recordingInfo').textContent='Your file is read only in this browser.';objectURL=URL.createObjectURL(file);video.src=objectURL;calibrationText();$('runStatus').textContent='Capture empty & stocked reference frames';};
+function seekFrame(seconds){return new Promise((resolve,reject)=>{if(!Number.isFinite(video.duration)||video.duration<=0)return reject(new Error('Recording has no seekable frames.'));const target=Math.min(Math.max(seconds,0),Math.max(0,video.duration-.1));if(Math.abs(video.currentTime-target)<.03)return resolve();video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});}
+async function calibrateIncluded(entry,generation){
+  const preset=entry.calibration;
+  if(!preset)return;
+  $('runStatus').textContent='Preparing shelf references';
+  for(const [id,value] of [['roiX',preset.roi[0]],['roiY',preset.roi[1]],['roiW',preset.roi[2]],['roiH',preset.roi[3]]])$(id).value=value;
+  await seekFrame(preset.emptyAt);if(generation!==sourceGeneration)return;frame();refs.empty=vectors();
+  await seekFrame(preset.fullAt);if(generation!==sourceGeneration)return;frame();refs.full=vectors();
+  await seekFrame(0);if(generation!==sourceGeneration)return;frame();previous=null;calibrationText();$('runStatus').textContent='Ready · real shelf references loaded';
+}
+function loadIncluded(entry){
+  stopSource();source='recording';includedRecording=entry;sourceLabel('Included recording');$('previewLabel').textContent='INCLUDED VIDEO · ANALYSIS LOCAL';
+  $('recordingSelect').value=entry.id;$('recordingInfo').textContent=entry.detail;
+  video.src='/recordings/'+entry.file;video.load();calibrationText();$('runStatus').textContent='Loading included recording';
+}
+async function loadLibrary(){
+  try{
+    const response=await requestLocal('/api/recordings');if(!response.ok)throw new Error('Library unavailable');
+    const {available}=await response.json(),entries=recordings.filter(entry=>available.includes(entry.id));
+    if(!entries.length)return;
+    for(const entry of entries){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.title;$('recordingSelect').append(option);}
+    $('recordingLibrary').hidden=false;loadIncluded(entries[0]);
+  }catch{error('Built-in recordings unavailable. Use the guided demo or choose a local file.');}
+}
+$('loadRecording').onclick=()=>loadIncluded(recordings.find(entry=>entry.id===$('recordingSelect').value)||recordings[0]);
+video.onloadedmetadata=async()=>{if(source!=='recording')return;const generation=sourceGeneration;$('seek').disabled=false;try{if(includedRecording?.calibration)await calibrateIncluded(includedRecording,generation);else{video.currentTime=0;$('runStatus').textContent='Capture empty & stocked reference frames';}}catch(e){if(generation===sourceGeneration){$('runStatus').textContent='Capture empty & stocked reference frames';error('Automatic calibration was unavailable. Capture references manually.');}}};
 video.onended=()=>pause('Recording ended · metrics retained');video.onerror=()=>error('This video format could not be decoded. Use an H.264 MP4 or WebM recording.');
 $('seek').oninput=()=>{pause();video.currentTime=Number($('seek').value)/100*video.duration;previous=null;recent=[];currentState=null;tracker.reset();observationIssue='';latestEstimate=null;renderTiles();emptySeconds=0;lastEmit=0;};
-$('camera').onclick=async()=>{stopSource();source='camera';sourceLabel('Local webcam');calibrationText();try{stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:360},audio:false});video.srcObject=stream;await video.play();$('runStatus').textContent='Capture empty & stocked reference frames';}catch{error('Webcam unavailable or access was declined. Choose a recording instead.');}};
+$('camera').onclick=async()=>{stopSource();source='camera';sourceLabel('Local webcam');$('previewLabel').textContent='LOCAL CAMERA · NEVER UPLOADED';calibrationText();try{stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:360},audio:false});video.srcObject=stream;await video.play();$('runStatus').textContent='Capture empty & stocked reference frames';}catch{error('Webcam unavailable or access was declined. Choose a recording instead.');}};
 for(const [button,key] of [['captureEmpty','empty'],['captureFull','full']])$(button).onclick=()=>{error();if(source!=='demo'&&video.readyState<2)return error('Wait for a video frame to load.');pause('Reference changed · restart analysis');frame();refs[key]=vectors();previous=null;recent=[];currentState=null;tracker.reset();observationIssue='';latestEstimate=null;renderTiles();resetNeeded=true;calibrationText();};
 for(const id of ['roiX','roiY','roiW','roiH'])$(id).onchange=()=>{const r=roi();if(![r.x,r.y,r.w,r.h].every(Number.isFinite)||r.x<0||r.y<0||r.w<.05||r.h<.05||r.x+r.w>1||r.y+r.h>1){error('Shelf zone must fit within the image.');$(id).value={roiX:10,roiY:22,roiW:80,roiH:60}[id];return;}pause('Zone changed · recalibrate');refs={};previous=null;recent=[];currentState=null;tracker.reset();observationIssue='';latestEstimate=null;labels=[];resetNeeded=true;renderTiles();renderValidation();if(source==='demo')calibrateDemo();else calibrationText();error();};
 function renderTiles(){
@@ -151,4 +179,14 @@ $('attack').onclick=async()=>{
   }catch{error('Privacy test could not reach the local server.');}finally{$('attack').disabled=false;}
 };
 window.addEventListener('pagehide',()=>{if(stream)stream.getTracks().forEach(t=>t.stop());if(objectURL)URL.revokeObjectURL(objectURL);});
-calibrateDemo();renderTiles();renderValidation();renderROI();render();dashboard();setInterval(tick,500);
+$('guidedDemo').onclick=async()=>{
+  stopSource();source='demo';sourceLabel('Synthetic demo');$('previewLabel').textContent='SYNTHETIC VIDEO · ANALYSIS LOCAL';demoPercent=100;calibrateDemo();
+  $('demoStep').textContent='1/3 Shelf stocked — staff has no task.';
+  await $('start').onclick();if(!running)return;
+  const schedule=(ms,fn)=>guidedTimers.push(setTimeout(fn,ms));
+  schedule(3000,()=>{demoPercent=33;$('demoStep').textContent='2/3 Stock is running low — staff gets an alert.';});
+  schedule(6000,()=>{demoPercent=0;$('demoStep').textContent='2/3 Shelf empty — restock task remains open.';});
+  schedule(11500,()=>{demoPercent=100;$('demoStep').textContent='3/3 Shelf restocked — task closes and recovery time is shown.';});
+  schedule(15000,()=>pause('Demo finished · metrics retained'));
+};
+calibrateDemo();renderTiles();renderValidation();renderROI();render();dashboard();setInterval(tick,500);loadLibrary();

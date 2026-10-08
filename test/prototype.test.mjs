@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {validateEvent} from '../public/contract.mjs';
 import {occupancy,stockState,createStockTracker,localizedMotion} from '../public/perception.mjs';
 import {createServer} from '../server.mjs';
+import {recordings} from '../public/recordings.mjs';
 const event={type:'shelf_status',shelf_id:'shelf-01',timestamp:'2026-10-07T10:00:00.000Z',state:'full',occupancy:100};
 test('Every supported operational event passes the contract',()=>{
   for(const e of [event,{...event,type:'stockout_duration',seconds:9},{...event,type:'shelf_interaction',count:1},{...event,type:'congestion',count:2}]){
@@ -84,5 +85,24 @@ test('Low stock opens a staff task; acknowledgement and replenishment measure re
     assert.ok(Number.isInteger(state.metrics.lastResponseSeconds));
     assert.ok(!JSON.stringify(state).includes('PRIVATE'));
     assert.equal((await fetch(base+'/api/acknowledge',{method:'POST'})).status,409);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+test('Available local recordings are listed and served by exact name with seeking',async()=>{
+  const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+    const base=`http://127.0.0.1:${server.address().port}`;
+    assert.equal(recordings.length,10);
+    const listed=(await (await fetch(base+'/api/recordings')).json()).available;
+    assert.ok(Array.isArray(listed));
+    for(const item of recordings.filter(entry=>listed.includes(entry.id))){
+      const response=await fetch(base+'/recordings/'+item.file,{headers:{Range:'bytes=0-15'}});
+      assert.equal(response.status,206,item.file);
+      assert.equal(response.headers.get('content-type'),'video/mp4');
+      assert.match(response.headers.get('content-range'),/^bytes 0-15\/\d+$/);
+      assert.equal((await response.arrayBuffer()).byteLength,16);
+    }
+    assert.equal((await fetch(base+'/recordings/unknown.mp4')).status,404);
+    if(listed.includes('clip-03'))assert.equal((await fetch(base+'/recordings/clip-03.mp4',{headers:{Range:'bytes=999999999-'}})).status,416);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
