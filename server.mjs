@@ -5,14 +5,20 @@ import {validateEvent} from './public/contract.mjs';
 const files = new Map(['index.html','styles.css','app.mjs','api.mjs','contract.mjs','perception.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
 const mime={html:'text/html',css:'text/css',mjs:'text/javascript'};
 export function createServer() {
-  const state={events:[],audit:[],accepted:0,blocked:0,metrics:{interactions:0,status:null,stockoutSeconds:0}};
+  const state={events:[],audit:[],accepted:0,blocked:0,metrics:{interactions:0,status:null,stockoutSeconds:0,alertsResolved:0,lastResponseSeconds:null},alert:null};
   function audit(reason){ state.blocked++; state.audit.unshift({timestamp:new Date().toISOString(),reason}); state.audit=state.audit.slice(0,50); }
   return http.createServer(async(req,res)=>{
     const json=(status,body)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
     const origin=req.headers.origin;
     if(origin && origin !== `http://${req.headers.host}`) return json(403,{error:'ORIGIN_DENIED'});
     if(req.method==='GET' && req.url==='/api/dashboard') return json(200,state);
-    if(req.method==='POST' && req.url==='/api/reset') {state.events=[];state.audit=[];state.accepted=0;state.blocked=0;state.metrics={interactions:0,status:null,stockoutSeconds:0};return json(200,{ok:true});}
+    if(req.method==='POST' && ['/api/reset','/api/acknowledge'].includes(req.url) && (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length']!=='0'))) {audit('UNEXPECTED_ACTION_BODY');return json(413,{ok:false,reason:'UNEXPECTED_ACTION_BODY'});}
+    if(req.method==='POST' && req.url==='/api/reset') {state.events=[];state.audit=[];state.accepted=0;state.blocked=0;state.metrics={interactions:0,status:null,stockoutSeconds:0,alertsResolved:0,lastResponseSeconds:null};state.alert=null;return json(200,{ok:true});}
+    if(req.method==='POST' && req.url==='/api/acknowledge') {
+      if(!state.alert || state.alert.acknowledgedAt) return json(409,{ok:false,reason:'NO_OPEN_ALERT'});
+      state.alert.acknowledgedAt=new Date().toISOString();
+      return json(200,{ok:true,alert:state.alert});
+    }
     if(req.method==='POST' && req.url==='/api/events') {
       if(req.headers['content-type'] !== 'application/json') {audit('INVALID_CONTENT_TYPE');return json(415,{ok:false,reason:'INVALID_CONTENT_TYPE'});}
       let body=''; let size=0;
@@ -26,6 +32,14 @@ export function createServer() {
         if(event.type==='shelf_status'){
           if(event.state!=='empty'||state.metrics.status?.state!=='empty')state.metrics.stockoutSeconds=0;
           state.metrics.status=event;
+          if(event.state==='low'||event.state==='empty') {
+            if(!state.alert) state.alert={openedAt:new Date().toISOString(),severity:event.state,acknowledgedAt:null};
+            else if(event.state==='empty') state.alert.severity='empty';
+          } else if(state.alert) {
+            state.metrics.alertsResolved++;
+            state.metrics.lastResponseSeconds=Math.max(0,Math.round((Date.now()-Date.parse(state.alert.openedAt))/1000));
+            state.alert=null;
+          }
         }
         if(event.type==='stockout_duration'&&state.metrics.status?.state==='empty')state.metrics.stockoutSeconds=event.seconds;
         return json(200,{ok:true});

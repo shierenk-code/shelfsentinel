@@ -1,5 +1,9 @@
 # Prototype validation
 
+## 8 October 2026 update
+
+The updated project passes all nine `npm test` checks, including the staff alert lifecycle, body rejection on action endpoints, uncertain-tile suppression, stable-state confirmation, and localized-motion gate. The browser demo was checked for low-stock alert creation, acknowledgement, automatic closure on replenishment, response time, tile explanation, and both privacy gates blocking the synthetic attack. Changing synthetic stock state no longer increments the motion trigger count. With **Obstruct view**, the dashboard showed **View uncertain**, held the previous 100% reading, and emitted no new stock event during the observed obstruction. The recovery calculator initializes to ₹7,500 for its displayed assumptions. Physical shelf accuracy remains unmeasured; use the protocol in `SHOWCASE.md` before claiming real-world performance.
+
 Tested locally on Windows with Node.js and headless Microsoft Edge on 7 October 2026.
 
 ## Automated checks
@@ -29,7 +33,9 @@ The browser test exercised the actual page and local HTTP receiver:
 
 ## Recording checks
 
-The supplied clips were decoded and played locally in Edge. See `recording-results.json` for measured clip durations and motion-trigger counts. These results are smoke tests of the local video/event path, not accuracy measurements or actual product-pick counts. No clip includes the empty-shelf reference required for tested real stock classification.
+The four supplied clips in `OneDrive_2026-10-07.zip` were decoded and played locally in the browser on 8 October 2026 with the current localized-motion detector. The observed motion-trigger counts were 3, 5, 3 and 5, in the order shown in `recording-results.json`. These counts are sensitive to playback timing and are **not** product-pick counts or an accuracy measurement. All four runs remained **Uncalibrated** for stock state.
+
+Opening and closing frames showed the shelf stocked in every clip. The filename phrase “zero products” describes the intended product-pick scenario, not a visually empty shelf reference. No clip supplies the visibly empty and stocked pair for the same shelf zone that this classifier needs. Raw recordings were inspected locally; they were not added to the repository or sent to the local receiver.
 
 ## Remaining real-world validation
 

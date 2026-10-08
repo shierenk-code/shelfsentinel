@@ -13,7 +13,7 @@ npm start
 
 Open **http://127.0.0.1:8787** in Edge or Chrome. Alternatively, double-click `start.cmd` on Windows. Keep the terminal open while using the prototype. Ctrl+C stops it. To choose another port, set `PORT` before running the server.
 
-## Two-minute demo
+## Three-minute demo
 
 If Start Analysis reports that the local server is unavailable, run `npm start` in this repository and keep that terminal open. The page can remain visible after the server stops, but `/api/reset` and event requests then fail. Reload `http://127.0.0.1:8787` once the server is running. Choosing a recording opens it locally; it does not upload the video.
 
@@ -22,6 +22,10 @@ If Start Analysis reports that the local server is unavailable, run `npm start` 
 3. Click **Run privacy attack**. The edge gate blocks a synthetic embedding/coordinate payload. A deliberate API bypass probe demonstrates that the receiver also rejects it. The audit retains only a timestamp and fixed rejection reason.
 4. Inspect **What the network sees**: typed operational JSON, with no frames, coordinates, customer identifier, or appearance fields.
 5. Click **Pause**. The event stream and stockout clock stop; existing metrics remain.
+6. For the staff workflow, click **Low stock**, **Acknowledge**, then **Stocked**. The server records time from alert opening to recovery.
+7. Click **Obstruct view**. The dashboard marks the view uncertain and holds the last verified stock signal until enough shelf tiles are visible again.
+
+See [SHOWCASE.md](SHOWCASE.md) for a judging walkthrough, physical shelf test protocol, deployment discussion and ROI method.
 
 The synthetic shelf is clearly labeled and supplies known empty/stocked references. It is not a claim of performance on real stockout footage.
 
@@ -40,10 +44,13 @@ For real shelf availability:
 ## What is implemented
 
 - Browser video decoding and processing using canvas; MP4/WebM input and webcam, without audio.
-- A 6 × 3 shelf grid. Mean RGB samples are compared with empty and stocked references. Distinguishable tiles nearer the stocked reference estimate occupancy. `empty` ≤ 15%, `low` ≤ 45%, otherwise `full`. A four-sample window smooths the result.
-- Shelf motion from changes between consecutive grid samples, with a three-second cooldown. Changes caused by lighting, products or occlusion can also trigger it.
+- A 6 × 3 shelf grid. Mean RGB samples are compared with empty and stocked references. Tiles that match neither reference or are ambiguous are withheld. If fewer than 65% of distinguishable tiles are visible, stock judgment pauses. `empty` ≤ 15%, `low` ≤ 45%, otherwise `full`. A four-sample window smooths occupancy and three matching states confirm a transition.
+- Localized shelf motion from changes between consecutive grid samples, with a three-second cooldown. Broad scene changes are ignored. Product movement or occlusion can still trigger the interaction proxy.
 - Strict allow-listed event validation at the browser edge and independently at the local receiver. Unknown fields, missing fields, nested values in scalar fields, invalid types/ranges, arbitrary shelf identifiers, and oversized requests are rejected.
 - Approved/blocked totals, reason-only audit, bounded event stream, restock alerts, observation time, and anonymous motion totals.
+- A replenishment task that opens on low/empty, can be acknowledged, and closes when the shelf is stocked again. The local receiver measures response time.
+- A browser-local tile explanation and labeled-frame validation table. The table requires a real recording or webcam and clears when the source or zone changes.
+- An editable sales-recovery scenario whose inputs and output stay in the browser. It is an assumption-based opportunity, not measured ROI.
 - Responsive dashboard, local-only server, source changes, pause/resume, seek, and video-end handling.
 
 ## Privacy boundary and practical limits
@@ -54,7 +61,7 @@ The Node server listens only on `127.0.0.1`. Operational events and fixed audit 
 
 This is an architecture demo, not a hardened edge appliance. A compromised browser could bypass its client validator; the receiver's strict schema remains the second boundary. Receiver rejection alone cannot prevent a malicious client from attempting transmission. Production needs signed/attested edge builds and a protected transport boundary. No face recognition, demographics, person tracking, persistent IDs or object recognition is performed. Congestion is part of the contract for future extension, but this prototype does not generate congestion events.
 
-The grid method is sensitive to lighting, occlusion and camera movement. It does not count individual products or recognize SKUs. Stockout duration measures active wall-clock observation, excluding pauses; it is not a historical duration reconstructed from a recording. The API is intended for a single local demo session without authentication. Browser refresh preserves server metrics but loses edge calibration and edge audit history.
+The grid method is sensitive to lighting, occlusion and camera movement. Uncertain tiles and temporal confirmation reduce false alerts but do not establish real-world accuracy. It does not count individual products or recognize SKUs. Stockout duration measures active wall-clock observation, excluding pauses and uncertain views; it is not a historical duration reconstructed from a recording. The API is intended for a single local demo session without authentication. Browser refresh preserves server metrics but loses edge calibration, local validation samples, scenario inputs and edge audit history.
 
 ## Verify
 

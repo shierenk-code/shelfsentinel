@@ -2,16 +2,16 @@
   {
     "file": "PickOneProductLeaveWithZeroProduct.mp4",
     "durationSeconds": 12.7,
-    "motionTriggers": 1,
+    "motionTriggers": 3,
     "stockClassification": "Uncalibrated",
-    "events": 1
+    "events": 3
   },
   {
     "file": "PickTwoProductsLeaveWithOneProduct.mp4",
     "durationSeconds": 13.834,
-    "motionTriggers": 4,
+    "motionTriggers": 5,
     "stockClassification": "Uncalibrated",
-    "events": 4
+    "events": 5
   },
   {
     "file": "PickTwoProductsLeaveWithTwoProducts.mp4",
@@ -23,8 +23,8 @@
   {
     "file": "PickTwoProductsLeaveWithZeroProducts.mp4",
     "durationSeconds": 16.666,
-    "motionTriggers": 4,
+    "motionTriggers": 5,
     "stockClassification": "Uncalibrated",
-    "events": 4
+    "events": 5
   }
 ]

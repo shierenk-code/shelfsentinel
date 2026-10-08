@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {validateEvent} from '../public/contract.mjs';
-import {occupancy,stockState} from '../public/perception.mjs';
+import {occupancy,stockState,createStockTracker,localizedMotion} from '../public/perception.mjs';
 import {createServer} from '../server.mjs';
 const event={type:'shelf_status',shelf_id:'shelf-01',timestamp:'2026-10-07T10:00:00.000Z',state:'full',occupancy:100};
 test('Every supported operational event passes the contract',()=>{
@@ -25,6 +25,32 @@ test('Calibration identifies full, partial and empty shelf plus insufficient ref
   assert.equal(stockState(0),'empty');assert.equal(stockState(33),'low');assert.equal(stockState(100),'full');
   assert.throws(()=>occupancy(full,full,full));
 });
+test('Occlusion withholds a stock judgment while modest lighting change remains readable',()=>{
+  const empty=Array(54).fill(20),full=Array(54).fill(200);
+  const occluded=[...Array(24).fill(110),...Array(30).fill(200)];
+  const blocked=occupancy(occluded,empty,full);
+  assert.equal(blocked.reliable,false);assert.equal(blocked.percent,null);
+  assert.equal(blocked.tiles.filter(t=>t==='uncertain').length,8);
+  const lit=occupancy(Array(54).fill(230),empty,full);
+  assert.equal(lit.reliable,true);assert.equal(lit.percent,100);
+});
+test('Stock state needs three stable observations and uncertainty breaks a pending transition',()=>{
+  const tracker=createStockTracker();
+  assert.equal(tracker.update('full'),null);
+  assert.equal(tracker.update('full'),null);
+  assert.equal(tracker.update('full'),'full');
+  assert.equal(tracker.update('empty'),'full');
+  tracker.uncertain();
+  assert.equal(tracker.update('empty'),'full');
+  assert.equal(tracker.update('empty'),'full');
+  assert.equal(tracker.update('empty'),'empty');
+});
+test('Interaction proxy ignores changes across most of the shelf',()=>{
+  const before=Array(54).fill(20),local=[...before],global=Array(54).fill(100);
+  local[0]=100;local[1]=100;local[2]=100;
+  assert.equal(localizedMotion(local,before),true);
+  assert.equal(localizedMotion(global,before),false);
+});
 test('Receiver rejects bypasses and stores only approved events and reason-only audits',async()=>{
   const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   try{
@@ -37,5 +63,26 @@ test('Receiver rejects bypasses and stores only approved events and reason-only 
     assert.equal((await fetch(base+'/api/events',{method:'POST',headers:{'Origin':'https://example.com','Content-Type':'application/json'},body:JSON.stringify(event)})).status,403);
     const state=await (await fetch(base+'/api/dashboard')).json();assert.equal(state.accepted,1);assert.equal(state.blocked,3);assert.equal(state.events.length,1);assert.ok(!JSON.stringify(state).includes('PRIVATE'));
     await fetch(base+'/api/reset',{method:'POST'});const cleared=await (await fetch(base+'/api/dashboard')).json();assert.equal(cleared.accepted,0);assert.equal(cleared.events.length,0);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
+test('Low stock opens a staff task; acknowledgement and replenishment measure response',async()=>{
+  const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+    const base=`http://127.0.0.1:${server.address().port}`;
+    const post=body=>fetch(base+'/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal((await post({...event,state:'low',occupancy:33})).status,200);
+    let state=await (await fetch(base+'/api/dashboard')).json();
+    assert.equal(state.alert.severity,'low');assert.equal(state.alert.acknowledgedAt,null);
+    assert.equal((await fetch(base+'/api/acknowledge',{method:'POST'})).status,200);
+    assert.equal((await fetch(base+'/api/acknowledge',{method:'POST'})).status,409);
+    assert.equal((await fetch(base+'/api/acknowledge',{method:'POST',body:'PRIVATE'})).status,413);
+    assert.equal((await post({...event,state:'empty',occupancy:0})).status,200);
+    state=await (await fetch(base+'/api/dashboard')).json();assert.equal(state.alert.severity,'empty');
+    assert.equal((await post(event)).status,200);
+    state=await (await fetch(base+'/api/dashboard')).json();
+    assert.equal(state.alert,null);assert.equal(state.metrics.alertsResolved,1);
+    assert.ok(Number.isInteger(state.metrics.lastResponseSeconds));
+    assert.ok(!JSON.stringify(state).includes('PRIVATE'));
+    assert.equal((await fetch(base+'/api/acknowledge',{method:'POST'})).status,409);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
