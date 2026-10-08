@@ -2,7 +2,13 @@ const schemas = {
   shelf_status: { state: v => ['full','low','empty'].includes(v), occupancy: v => Number.isFinite(v) && v >= 0 && v <= 100 },
   stockout_duration: { seconds: v => Number.isInteger(v) && v >= 0 && v <= 86400 },
   shelf_interaction: { count: v => Number.isInteger(v) && v >= 1 && v <= 1000 },
-  congestion: { count: v => Number.isInteger(v) && v >= 0 && v <= 1000 }
+  congestion: { count: v => Number.isInteger(v) && v >= 0 && v <= 1000 },
+  retail_signal: {
+    event: v => ['PERSON_ENTERED','DWELL_THRESHOLD','PRODUCT_INTERACTION','PRODUCT_REMOVED','PRODUCT_RETURNED','SHELF_LOW','SHELF_EMPTY','RESTOCK_DETECTED','QUEUE_BUILDUP','LONG_WAIT','CHECKOUT_CONGESTION'].includes(v),
+    zone: v => typeof v === 'string' && /^[A-Za-z0-9 _-]{1,32}$/.test(v),
+    confidence: v => Number.isInteger(v) && v >= 0 && v <= 100,
+    value: v => Number.isInteger(v) && v >= 0 && v <= 1000
+  }
 };
 export function validateEvent(event) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return {ok:false, reason:'INVALID_OBJECT'};

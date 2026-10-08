@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node server.mjs", "test": "node test/prototype.test.mjs" },
-  "engines": { "node": ">=20" }
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test/prototype.test.mjs && node test/retail.test.mjs",
+    "build:model": "esbuild public/model-entry.mjs --bundle --format=esm --minify --outfile=public/model-bundle.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@tensorflow-models/coco-ssd": "^2.2.3",
+    "@tensorflow/tfjs": "^4.22.0",
+    "esbuild": "^0.28.2"
+  }
 }

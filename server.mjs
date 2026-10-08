@@ -6,9 +6,11 @@ import {stat} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateEvent} from './public/contract.mjs';
 import {recordings} from './public/recordings.mjs';
-const files = new Map(['index.html','styles.css','app.mjs','api.mjs','contract.mjs','perception.mjs','recordings.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
+const files = new Map(['index.html','styles.css','app.mjs','api.mjs','contract.mjs','perception.mjs','recordings.mjs','retail-app.mjs','retail-core.mjs','retail.css','model-bundle.mjs'].map(name=>['/'+(name==='index.html'?'':name),new URL('./public/'+name,import.meta.url)]));
 const media = new Map(recordings.map(item=>['/recordings/'+item.file,new URL('./public/recordings/'+item.file,import.meta.url)]).filter(([,path])=>existsSync(path)));
-const mime={html:'text/html',css:'text/css',mjs:'text/javascript'};
+const modelFiles=['model.json','group1-shard1of5','group1-shard2of5','group1-shard3of5','group1-shard4of5','group1-shard5of5'];
+for(const name of modelFiles)files.set('/models/ssdlite_mobilenet_v2/'+name,new URL('./public/models/ssdlite_mobilenet_v2/'+name,import.meta.url));
+const mime={html:'text/html',css:'text/css',mjs:'text/javascript',json:'application/json'};
 export function createServer() {
   const state={events:[],audit:[],accepted:0,blocked:0,metrics:{interactions:0,status:null,stockoutSeconds:0,alertsResolved:0,lastResponseSeconds:null},alert:null};
   function audit(reason){ state.blocked++; state.audit.unshift({timestamp:new Date().toISOString(),reason}); state.audit=state.audit.slice(0,50); }
@@ -52,7 +54,7 @@ export function createServer() {
       } catch {audit('INVALID_JSON');return json(400,{ok:false,reason:'INVALID_JSON'});}
     }
     if(req.method==='GET' && files.has(req.url)) {
-      try {const path=files.get(req.url);res.writeHead(200,{'Content-Type':mime[path.pathname.split('.').pop()], 'Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'X-Content-Type-Options':'nosniff'}); res.end(await readFile(path));return;}catch{return json(500,{error:'FILE_UNAVAILABLE'});}
+      try {const path=files.get(req.url);const extension=path.pathname.split('.').pop();res.writeHead(200,{'Content-Type':mime[extension]||'application/octet-stream', 'Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",'X-Content-Type-Options':'nosniff'}); res.end(await readFile(path));return;}catch{return json(500,{error:'FILE_UNAVAILABLE'});}
     }
     if((req.method==='GET'||req.method==='HEAD') && media.has(req.url)) {
       try {
