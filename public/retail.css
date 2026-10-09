@@ -75,6 +75,10 @@ body.dark .overview-health-card{background:linear-gradient(135deg,#0a281d,#184d3
 #entry .recording-library,#shelf .recording-library{display:none}
 #entry #visits,#shelf #events,#shelf #operations,#shelf #insights,#shelf #recovery{display:none}
 .advanced-zone{margin:0 0 20px;color:var(--muted)}.advanced-zone>summary{cursor:pointer;color:var(--accent);font-weight:700;padding:10px 0}.advanced-zone #zones{border:0;margin:0;padding:8px 0}.advanced-zone #zones>.page-heading{display:none}
+.advanced-zone #zones>.two{display:block}.advanced-zone #zones>.two>.panel:first-child{display:none}.advanced-zone #zones>.two>.panel:last-child{max-width:900px}
+#shelf:has(.advanced-zone[open]) #videoCanvas{cursor:crosshair}
+.seek-control{display:flex;align-items:center;gap:12px;font-size:11px;color:var(--muted);margin:12px 0}.seek-control input{flex:1;accent-color:var(--accent)}.seek-control span{min-width:36px;text-align:right}
+.shelf-activity td:last-child{white-space:normal;min-width:280px}.shelf-activity tr{cursor:pointer}
 #entry #video,#shelf #video{border:0;padding:0;margin:0 0 18px}
 #entry #video>.page-heading,#shelf #video>.page-heading{display:none}
 #entry #video>.two,#shelf #video>.two{display:block}

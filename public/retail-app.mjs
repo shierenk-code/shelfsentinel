@@ -15,14 +15,19 @@ entryPage.querySelector('#entryExited').parentElement.querySelector('span').text
 const exitOnlyNote=document.createElement('p');exitOnlyNote.id='exitOnlyCount';exitOnlyNote.className='subtle';entryPage.querySelector('#entryTableRows').closest('.table-wrap').before(exitOnlyNote);
 const shelfPage=document.createElement('section');shelfPage.id='shelf';shelfPage.className='page';
 shelfPage.innerHTML='<div class="page-heading"><p class="eyebrow">SHELF OPERATIONS</p><h1>Shelf Maintenance</h1><p>Analyze a shelf video, see how much of the monitored area looks stocked, and review stock changes.</p></div><div class="panel recording-library"><h2>Shelf recordings</h2><div id="shelfClipList" class="recording-grid"></div></div><div class="panel shelf-settings"><h2>Shelf status</h2><div class="summary-grid"><article class="summary-card"><span>Visible shelf occupancy</span><strong id="shelfInventoryLevel">Not calibrated</strong><small>Compared with reference frames</small></article><article class="summary-card"><span>Stock status</span><strong id="shelfInventoryStatus">Awaiting analysis</strong><small id="shelfInventoryDetail">Run a calibrated shelf recording</small></article><article class="summary-card"><span>Low-stock limit</span><strong id="shelfLimitValue">25%</strong><small>Alert below this estimate</small></article><article class="summary-card"><span>Suggested action</span><strong id="shelfInventoryAction">None yet</strong><small>Based on observed changes</small></article></div><label>Low-stock limit (%) <input id="shelfLimitInput" type="number" min="1" max="90" value="25"></label><button id="saveShelfLimit">Save limit</button><p class="subtle">Visual occupancy is an estimate. These recordings do not identify individual products or count SKUs.</p></div><div class="panel"><h2>Shelf analysis</h2><div class="table-wrap"><table><thead><tr><th>Monitored area</th><th>Visible stock</th><th>Empty space</th><th>Status</th><th>Last observation</th></tr></thead><tbody id="shelfTableRows"><tr><td colspan="5">Analyze a calibrated shelf video to see stock estimates.</td></tr></tbody></table></div></div>';
+const shelfActivity=document.createElement('div');shelfActivity.className='panel shelf-activity';shelfActivity.innerHTML='<h2>Shelf activity</h2><p class="subtle">Changes inferred from the calibrated shelf area appear here while the video runs.</p><div class="table-wrap"><table><thead><tr><th>Video time</th><th>Observation</th><th>Visible stock</th><th>Evidence</th></tr></thead><tbody id="shelfActivityRows"><tr><td colspan="4">No shelf activity yet.</td></tr></tbody></table></div></div>';
+shelfPage.append(shelfActivity);
+const calibrationStatus=document.createElement('p');calibrationStatus.id='shelfCalibrationStatus';calibrationStatus.className='subtle';shelfPage.querySelector('.shelf-settings').append(calibrationStatus);
 const demoButton=$('overviewDemo');demoButton.hidden=false;demoButton.textContent='Run sample shelf scenario';shelfPage.querySelector('.page-heading').append(demoButton);
 dashboard.insertBefore(entryPage,$('visits'));
 dashboard.insertBefore(shelfPage,$('visits'));
 for(const id of ['video','visits','zones','events','operations','insights','privacy','recovery'])$(id).className='dashboard-section';
 entryPage.append($('video'),$('visits'));
 shelfPage.append($('zones'),$('events'),$('operations'),$('insights'));
-const advancedZone=document.createElement('details');advancedZone.className='advanced-zone';advancedZone.innerHTML='<summary>Calibrate a different shelf video</summary><p class="subtle">For a new camera angle, draw the shelf area and capture empty and stocked reference frames before expecting a stock percentage.</p>';
+const advancedZone=document.createElement('details');advancedZone.className='advanced-zone';advancedZone.innerHTML='<summary>Calibrate a different shelf video</summary><p class="subtle">Use the one video above: pause or seek to an empty frame and capture it, then seek to a stocked frame and capture it. Drag on that same video to adjust the shelf area.</p>';
 advancedZone.append($('zones'));shelfPage.insertBefore(advancedZone,$('events'));
+const seekControl=document.createElement('label');seekControl.className='seek-control';seekControl.innerHTML='Review frame <input id="videoSeek" type="range" min="0" max="100" step="0.1" value="0" aria-label="Seek video frame"><span id="videoSeekTime">0:00</span>';
+$('videoProgress').parentElement.after(seekControl);
 $('overview').append($('privacy'));
 shelfPage.append($('recovery'));
 for(const id of ['inspectObjects','inspectInteraction'])$(id).parentElement.classList.add('shelf-only');
@@ -37,13 +42,14 @@ const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,pa
 const availableRecordingIds=new Set(),lastQueueIndex={entry:-1,shelf:-1};
 const visitLog=[];let visitNumber=0;const unmatchedExitIds=new Set();
 const storeSummary={shelfPercent:null,shelfSimulated:false};
-const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,visitSample:!!entry.visitSample,exitOnly:!!entry.exitOnly,visitZones:entry.visitZones,detail:entry.detail});
+const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,shelfRoi:entry.shelfRoi||null,visitSample:!!entry.visitSample,exitOnly:!!entry.exitOnly,visitZones:entry.visitZones,detail:entry.detail});
 const sourcePurpose=item=>item?.purpose||(item?.visitSample?'entry':'shelf');
-let zoneCounter=1,eventCounter=1,inferenceBusy=false;
+let zoneCounter=1,eventCounter=1,inferenceBusy=false,calibrationPromise=Promise.resolve();
 const videoReady=()=>state.source?.kind!=='synthetic'&&video.readyState>=2;
 const currentMediaTime=()=>state.source?.kind==='synthetic'?(performance.now()-state.syntheticStarted)/1000:video.currentTime||0;
 const zoneById=id=>state.zones.find(z=>z.id===id);
 const formatTime=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
+$('videoSeek').oninput=()=>{if(!state.source||state.source.kind==='synthetic'||!Number.isFinite(video.duration))return;state.running=false;state.paused=true;video.pause();video.currentTime=Number($('videoSeek').value)/100*video.duration;renderAll();};
 const formatNumber=n=>Number.isFinite(n)?String(Math.round(n)):'Not available from current model';
 let noticeTimer;
 const status=(message,type='info')=>{const box=$('notice');clearTimeout(noticeTimer);box.textContent=message;box.hidden=!message;box.className='notice '+type;if(type==='info'&&message)noticeTimer=setTimeout(()=>{box.hidden=true;},5000);};
@@ -96,7 +102,7 @@ function drawFrame(ctx,withBoxes=true){
     ctx.fillStyle=ctx.strokeStyle;ctx.font='11px Segoe UI';ctx.fillText(`${detection.class} ${Math.round(detection.score*100)}%`,x+2,Math.max(12,y-3));
   }
 }
-function renderCanvas(){for(const [key,ctx] of Object.entries(contexts))drawFrame(ctx,key!=='zone');requestAnimationFrame(renderCanvas);}
+function renderCanvas(){drawFrame(contexts.video,true);requestAnimationFrame(renderCanvas);}
 
 function clearTimers(){for(const timer of state.syntheticTimers)clearTimeout(timer);state.syntheticTimers=[];}
 function resetAnalysis(keepQueue=true,clearVisitStore=true){
@@ -130,8 +136,9 @@ $('removeZone').onclick=()=>{if(!state.selectedZone)return;state.zones=state.zon
 $('zoneForm').onsubmit=event=>{event.preventDefault();const zone=zoneById(state.selectedZone);if(!zone)return;const name=$('zoneName').value.trim();if(!/^[A-Za-z0-9 _-]{1,32}$/.test(name)){status('Zone names can use letters, numbers, spaces, hyphens, and underscores.','warning');return;}zone.name=name;zone.type=$('zoneType').value;zone.detection=$('zoneDetection').value;zone.dwell=clamp(Number($('zoneDwell').value),1,600);zone.queue=clamp(Number($('zoneQueue').value),1,30);zone.shelf=clamp(Number($('zoneShelf').value),1,90);state.refs.delete(zone.id);renderZones();renderAll();status('Zone rules saved. Recalibrate a changed shelf zone.');};
 $('saveShelfLimit').onclick=()=>{const zone=state.zones.find(item=>item.type==='shelf');if(!zone)return status('Load a shelf recording first.','warning');const limit=Number($('shelfLimitInput').value);if(!Number.isInteger(limit)||limit<1||limit>90)return status('Choose a stock limit between 1% and 90%.','warning');zone.shelf=limit;renderZones();renderAll();status(`Low-stock limit saved at ${limit}%.`);};
 let drawStart=null;
-$('zoneCanvas').onpointerdown=event=>{const rect=canvases.zone.getBoundingClientRect();drawStart={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};canvases.zone.setPointerCapture(event.pointerId);};
-$('zoneCanvas').onpointerup=event=>{if(!drawStart)return;const rect=canvases.zone.getBoundingClientRect(),end={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};const x=Math.min(drawStart.x,end.x),y=Math.min(drawStart.y,end.y),w=Math.abs(end.x-drawStart.x),h=Math.abs(end.y-drawStart.y);drawStart=null;if(w<.04||h<.04)return status('Draw a larger rectangle.','warning');let zone=zoneById(state.selectedZone);if(!zone){zone=zoneDefaults();state.zones.push(zone);state.selectedZone=zone.id;}Object.assign(zone,{x,y,w,h});state.refs.delete(zone.id);renderZones();renderAll();status(`${zone.name} area updated. Capture new shelf references if needed.`);};
+function startZoneDrag(event){if(event.currentTarget===canvases.video&&(!advancedZone.open||state.page!=='shelf'))return;const rect=event.currentTarget.getBoundingClientRect();drawStart={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};event.currentTarget.setPointerCapture(event.pointerId);}
+function endZoneDrag(event){if(!drawStart)return;const rect=event.currentTarget.getBoundingClientRect(),end={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};const x=Math.min(drawStart.x,end.x),y=Math.min(drawStart.y,end.y),w=Math.abs(end.x-drawStart.x),h=Math.abs(end.y-drawStart.y);drawStart=null;if(w<.04||h<.04)return status('Draw a larger rectangle.','warning');let zone=zoneById(state.selectedZone);if(!zone){zone=zoneDefaults();state.zones.push(zone);state.selectedZone=zone.id;}Object.assign(zone,{x,y,w,h});state.refs.delete(zone.id);renderZones();renderAll();status(`${zone.name} area updated. Capture new shelf references if needed.`);}
+for(const canvas of [canvases.zone,canvases.video]){canvas.onpointerdown=startZoneDrag;canvas.onpointerup=endZoneDrag;}
 
 function renderQueue(){
   const purpose=state.page==='entry'?'entry':'shelf',box=$('videoQueue');
@@ -190,7 +197,7 @@ function loadSource(index){
   const next=state.queue[index],purpose=sourcePurpose(next);
   resetAnalysis(true,false);state.refs.clear();state.queueIndex=index;state.source=next;state.source.status='Loaded';lastQueueIndex[purpose]=index;
   if(purpose==='entry'){state.zones=(next.exitOnly?['exit']:['entrance','exit']).map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=next.visitZones?.[type]||(type==='entrance'?[.2,.35,.25,.6]:[.56,.35,.25,.6]);return zone;});state.selectedZone=state.zones[0].id;}
-  else {state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;}
+  else {const zone=zoneDefaults('shelf');if(next.shelfRoi)[zone.x,zone.y,zone.w,zone.h]=next.shelfRoi.map(value=>value/100);state.zones=[zone];state.selectedZone=zone.id;}
   renderZones();video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;$('recordingDetail').textContent=state.source.detail||'Local video selected in this browser.';$('visitsSourceNote').textContent=purpose==='entry'?'Doorway zones are estimates. The clip may show entrances without the same person leaving. Exits count only when one continuous temporary track crosses the Exit zone.':'Load a doorway recording on Entry & Exit to count visits.';renderRecordingOptions(purpose);for(const card of document.querySelectorAll('.recording-card'))card.classList.toggle('selected',card.dataset.recordingId===next.recordingId);status('Video loaded. Configure zones, then start local analysis.');renderAll();
 }
 async function seekTo(seconds){return new Promise((resolve,reject)=>{if(!Number.isFinite(video.duration)||video.duration<=0)return reject(Error('Video has no seekable frames'));const target=clamp(seconds,0,Math.max(0,video.duration-.1));if(Math.abs(video.currentTime-target)<.03)return resolve();video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});}
@@ -199,9 +206,9 @@ async function autoCalibrate(preset,generation){
   [zone.x,zone.y,zone.w,zone.h]=preset.roi.map(n=>n/100);renderZones();
   await seekTo(preset.emptyAt);if(generation!==state.generation)return;drawFrame(contexts.video,false);const empty=sampleShelf(zone);
   await seekTo(preset.fullAt);if(generation!==state.generation)return;drawFrame(contexts.video,false);const full=sampleShelf(zone);
-  await seekTo(0);if(generation!==state.generation)return;state.refs.set(zone.id,{empty,full});status('Real shelf references prepared. Press Start Analysis.');renderAll();
+  await seekTo(0);if(generation!==state.generation)return;state.refs.set(zone.id,{empty,full});$('referenceStatus').textContent=`${zone.name}: empty and stocked reference frames captured automatically.`;status('Shelf references ready. Press Start Analysis.');renderAll();
 }
-video.onloadedmetadata=async()=>{if(!state.source)return;const generation=state.generation;try{if(state.source.preset)await autoCalibrate(state.source.preset,generation);}catch{status('Automatic shelf calibration was unavailable. Capture references manually.','warning');}renderAll();};
+video.onloadedmetadata=()=>{if(!state.source)return;const generation=state.generation;calibrationPromise=(async()=>{try{if(state.source.preset)await autoCalibrate(state.source.preset,generation);}catch{status('Automatic shelf calibration was unavailable. Capture references manually.','warning');}renderAll();})();};
 video.onerror=()=>{$('videoError').textContent='This video could not be decoded. Choose an H.264 MP4 or WebM file.';state.source&&(state.source.status='Corrupt');state.running=false;renderAll();};
 video.onended=()=>{state.running=false;state.paused=false;if(state.source)state.source.status='Complete';renderAll();};
 $('captureEmpty').onclick=()=>captureReference('empty');$('captureStocked').onclick=()=>captureReference('full');
@@ -358,6 +365,8 @@ async function startAnalysis(){
   if(!state.source)return status('Add a video or run the guided synthetic demo first.','warning');
   if(state.failure==='camera'||state.failure==='corrupt')return status('Restore the video feed before starting.','warning');
   if(state.source.kind==='synthetic'){runSynthetic();return;}
+  if(video.readyState<1)return status('Video is still loading. Start analysis once its first frame appears.','warning');
+  const generation=state.generation;await calibrationPromise;if(generation!==state.generation)return;
   if(video.error)return status('This video cannot be played. Choose another recording.','warning');
   $('videoError').textContent='';
   if(video.ended||video.duration&&video.currentTime>=video.duration-.1)video.currentTime=0;
@@ -399,6 +408,10 @@ function renderAll(){
   const lastShelf=storeSummary.shelfPercent;
   $('briefShelf').textContent=Number.isFinite(lastShelf)?`${Math.round(lastShelf)}% visibly stocked`:'Awaiting analysis';$('briefShelfNote').textContent=Number.isFinite(lastShelf)?`Estimated empty space: ${Math.round(100-lastShelf)}%. ${storeSummary.shelfSimulated?'Simulated scenario.':'Last calibrated video observation.'}`:'Analyze a calibrated shelf video to estimate visible stock.';
   const shelfRows=$('shelfTableRows');shelfRows.replaceChildren();const shelfZones=state.zones.filter(zone=>zone.type==='shelf');if(!shelfZones.length){const tr=document.createElement('tr'),td=node('td','Load a shelf recording.');td.colSpan=5;tr.append(td);shelfRows.append(tr);}else for(const zone of shelfZones){const percent=state.shelfPercents.get(zone.id),measured=Number.isFinite(percent),tr=document.createElement('tr');for(const value of [zone.name,measured?`${Math.round(percent)}%`:'Not calibrated',measured?`${Math.round(100-percent)}%`:'Not calibrated',!measured?'Awaiting analysis':percent<=15?'Empty':percent<=zone.shelf?'Low stock':'Stocked',measured?formatTime(currentMediaTime()):'—'])tr.append(node('td',value));shelfRows.append(tr);}
+  const shelfZoneForStatus=shelfZones[0],refs=shelfZoneForStatus&&state.refs.get(shelfZoneForStatus.id);
+  $('shelfCalibrationStatus').textContent=!state.source||sourcePurpose(state.source)!=='shelf'?'Choose a shelf recording.':refs?.empty&&refs?.full?'Empty and stocked reference frames captured. Shelf analysis is ready.':state.source.preset?'Preparing automatic empty and stocked references…':'Reference frames needed. Open calibration below and capture empty and stocked frames from this video.';
+  const shelfActivityRows=$('shelfActivityRows');shelfActivityRows.replaceChildren();const shelfEvents=state.events.filter(event=>event.zone===shelfZoneForStatus?.name&&['SHELF_EMPTY','SHELF_LOW','RESTOCK_DETECTED','PRODUCT_REMOVED','PRODUCT_RETURNED','PRODUCT_INTERACTION'].includes(event.type));if(!shelfEvents.length){const tr=document.createElement('tr'),td=node('td',state.frames?'No shelf change observed yet.':'Start analysis to see shelf activity.');td.colSpan=4;tr.append(td);shelfActivityRows.append(tr);}else for(const event of shelfEvents.slice(0,20)){const tr=document.createElement('tr');for(const value of [formatTime(event.mediaTime),eventTitles[event.type]||event.type,Number.isFinite(event.value)?`${Math.round(event.value)}%`:'—',event.why])tr.append(node('td',value));tr.onclick=()=>showVideoMoment(event.mediaTime);shelfActivityRows.append(tr);}
+  $('videoSeek').disabled=!state.source||simulated||!duration;$('videoSeek').value=String(progress);$('videoSeekTime').textContent=formatTime(currentMediaTime());
   $('sideStatus').textContent=state.failure?`Degraded: ${state.failure}`:state.running?'Analyzing locally':state.source?'Session ready':'Local edge ready';
   $('runPill').textContent=state.failure?'DEGRADED':state.running?'ANALYZING':state.paused?'PAUSED':state.source?'READY':'IDLE';$('videoStatus').textContent=$('runPill').textContent;
   $('overviewVideo').textContent=state.source?`${state.source.name}${simulated?' · SAMPLE':''}`:'No recording selected';$('overviewModel').textContent=state.modelStatus;$('overviewEvents').textContent=String(state.events.length);
