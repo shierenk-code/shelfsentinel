@@ -1,5 +1,7 @@
 // Files are deliberately named and served from an allow-list; no directory browsing.
 export const recordings = [
+  {id:'entrance-exit',file:'entrance-exit-pexels-4077491.mp4',title:'Entrance / exit sample',detail:'Generic building entrance · Pexels video 4077491 · 20 seconds',visitSample:true,visitZones:{entrance:[.24,.42,.20,.55],exit:[.53,.42,.20,.55]}},
+  {id:'store-entrance',file:'store-entrance-pexels-6641527.mp4',title:'Store entrance sample',detail:'Grocery entrance · Pexels video 6641527 · 20 seconds',visitSample:true,visitZones:{entrance:[.27,.4,.17,.55],exit:[.44,.4,.16,.55]}},
   {id:'clip-03',file:'clip-03.mp4',title:'Restock the middle shelf',detail:'Best demo · empty shelf becomes stocked · 21 seconds',calibration:{roi:[42,40,32,32],emptyAt:0.6,fullAt:20}},
   {id:'clip-02',file:'clip-02.mp4',title:'Products removed from middle shelf',detail:'Stocked shelf becomes nearly empty · 11 seconds'},
   {id:'clip-01',file:'clip-01.mp4',title:'First product removal',detail:'Customer interaction at the shelf · 21 seconds'},

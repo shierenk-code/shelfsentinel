@@ -2,4 +2,6 @@ node_modules/
 .npm-cache/
 .env
 *.mp4
+!public/recordings/entrance-exit-pexels-4077491.mp4
+!public/recordings/store-entrance-pexels-6641527.mp4
 *.webm

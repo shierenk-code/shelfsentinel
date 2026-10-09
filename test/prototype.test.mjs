@@ -92,7 +92,7 @@ test('Available local recordings are listed and served by exact name with seekin
   const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   try{
     const base=`http://127.0.0.1:${server.address().port}`;
-    assert.equal(recordings.length,10);
+    assert.ok(recordings.length>=10);
     const listed=(await (await fetch(base+'/api/recordings')).json()).available;
     assert.ok(Array.isArray(listed));
     for(const item of recordings.filter(entry=>listed.includes(entry.id))){

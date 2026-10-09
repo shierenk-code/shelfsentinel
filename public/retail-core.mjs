@@ -41,6 +41,13 @@ export function shelfRule(previousPercent,currentPercent,threshold=25){
   return null;
 }
 
+export function visitTransition(previousZone,nextZone,hadTrack,hasOpenVisit){
+  if(!hadTrack||previousZone===nextZone)return null;
+  if(nextZone==='entrance'&&previousZone!=='exit'&&!hasOpenVisit)return 'enter';
+  if(nextZone==='exit'&&hasOpenVisit)return 'exit';
+  return null;
+}
+
 export function safeOutbound(event){
   return {type:'retail_signal',shelf_id:'shelf-01',timestamp:new Date().toISOString(),event:event.type,zone:event.zone,confidence:clamp(Math.round(event.confidence*100),0,100),value:clamp(Math.round(event.value||0),0,1000)};
 }

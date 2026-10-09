@@ -1,7 +1,7 @@
 import {validateEvent} from './contract.mjs';
 import {occupancy,localizedMotion} from './perception.mjs';
 import {recordings} from './recordings.mjs';
-import {zoneAtPoint,updateTemporaryTracks,shelfRule,safeOutbound,clamp} from './retail-core.mjs';
+import {zoneAtPoint,updateTemporaryTracks,shelfRule,visitTransition,safeOutbound,clamp} from './retail-core.mjs';
 import {loadLocalDetector} from './model-bundle.mjs';
 
 const $=id=>document.getElementById(id),video=$('videoElement');
@@ -11,7 +11,7 @@ const sampleCanvas=document.createElement('canvas');sampleCanvas.width=6;sampleC
 const sampleContext=sampleCanvas.getContext('2d',{willReadFrequently:true});
 const syntheticCanvas=document.createElement('canvas');syntheticCanvas.width=640;syntheticCanvas.height=360;
 const syntheticContext=syntheticCanvas.getContext('2d');
-const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,paused:false,model:null,modelStatus:'Not loaded',modelVersion:'COCO-SSD lite MobileNet v2',failure:null,frames:0,fps:0,latency:null,lastInference:0,lastFrameAt:0,lastSampleAt:0,detected:[],tracks:new Map(),nextTrackId:1,heat:Array(96).fill(0),events:[],insights:[],samples:[],buffer:[],lastOutbound:null,lastSuccessfulEvent:null,privacyViolations:0,zones:[],selectedZone:null,refs:new Map(),shelfPercents:new Map(),previousVectors:new Map(),lastStockStates:new Map(),queueCounts:new Map(),footfallIds:new Set(),dwellSamples:[],guideStep:0,syntheticPercent:100,syntheticTimers:[],generation:0};
+const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,paused:false,model:null,modelStatus:'Not loaded',modelVersion:'COCO-SSD lite MobileNet v2',failure:null,frames:0,fps:0,latency:null,lastInference:0,lastFrameAt:0,lastSampleAt:0,detected:[],tracks:new Map(),nextTrackId:1,heat:Array(96).fill(0),events:[],insights:[],samples:[],buffer:[],lastOutbound:null,lastSuccessfulEvent:null,privacyViolations:0,zones:[],selectedZone:null,refs:new Map(),shelfPercents:new Map(),previousVectors:new Map(),lastStockStates:new Map(),queueCounts:new Map(),footfallIds:new Set(),dwellSamples:[],visitsByTrack:new Map(),visitSnapshot:{activeCount:0,opened:0,exited:0,expired:0,active:[]},guideStep:0,syntheticPercent:100,syntheticTimers:[],generation:0};
 let zoneCounter=1,eventCounter=1,inferenceBusy=false;
 const videoReady=()=>state.source?.kind!=='synthetic'&&video.readyState>=2;
 const currentMediaTime=()=>state.source?.kind==='synthetic'?(performance.now()-state.syntheticStarted)/1000:video.currentTime||0;
@@ -49,7 +49,7 @@ function drawFrame(ctx,withBoxes=true){
   else if(videoReady())ctx.drawImage(video,0,0,640,360);
   else{ctx.fillStyle='#1d322a';ctx.fillRect(0,0,640,360);ctx.fillStyle='#b2c7b8';ctx.font='16px Segoe UI';ctx.fillText('Choose a video or run the guided demo',32,180);}
   for(const zone of state.zones){
-    const color=zone.type==='shelf'?'#79b78c':zone.type==='queue'?'#a690e1':'#9eb2ab';
+    const color=zone.type==='shelf'?'#79b78c':zone.type==='queue'?'#a690e1':zone.type==='entrance'?'#54c6b2':zone.type==='exit'?'#efa66d':'#9eb2ab';
     ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([6,4]);ctx.strokeRect(zone.x*640,zone.y*360,zone.w*640,zone.h*360);ctx.setLineDash([]);
     ctx.fillStyle=color;ctx.font='11px Segoe UI';ctx.fillText(zone.name,zone.x*640+4,zone.y*360+14);
   }
@@ -63,7 +63,7 @@ function renderCanvas(){for(const [key,ctx] of Object.entries(contexts))drawFram
 function clearTimers(){for(const timer of state.syntheticTimers)clearTimeout(timer);state.syntheticTimers=[];}
 function resetAnalysis(keepQueue=true){
   state.generation++;clearTimers();state.running=false;state.paused=false;video.pause();
-  state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.footfallIds.clear();state.dwellSamples=[];state.failure=null;state.guideStep=0;cooldown.clear();
+  state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.footfallIds.clear();state.dwellSamples=[];state.visitsByTrack.clear();state.visitSnapshot={activeCount:0,opened:0,exited:0,expired:0,active:[]};state.failure=null;state.guideStep=0;cooldown.clear();void clearVisits();
   if(!keepQueue){for(const item of state.queue)if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);state.queue=[];state.queueIndex=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();}
   renderAll();
 }
@@ -77,7 +77,7 @@ function sampleShelf(zone){
 }
 
 function zoneDefaults(type='shelf'){
-  return {id:`zone-${zoneCounter++}`,name:type==='shelf'?'Shelf A':type==='queue'?'Checkout':'New zone',type,detection:type==='shelf'?'shelf':'people',x:.42,y:.4,w:.32,h:.32,dwell:15,queue:4,shelf:25};
+  return {id:`zone-${zoneCounter++}`,name:type==='shelf'?'Shelf A':type==='queue'?'Checkout':type==='entrance'?'Entrance':type==='exit'?'Exit':'New zone',type,detection:type==='shelf'?'shelf':'people',x:.42,y:.4,w:.32,h:.32,dwell:15,queue:4,shelf:25};
 }
 function renderZones(){
   $('zoneList').replaceChildren(...state.zones.map(zone=>{const b=document.createElement('button');b.textContent=zone.name+' · '+zone.type;b.className=zone.id===state.selectedZone?'selected':'';b.onclick=()=>{state.selectedZone=zone.id;renderZones();};return b;}));
@@ -99,11 +99,15 @@ function renderQueue(){
 }
 function addQueueItem(item){state.queue.push({...item,id:crypto.randomUUID(),status:'Ready'});if(state.queueIndex<0)loadSource(0);else renderQueue();}
 $('videoFiles').onchange=()=>{for(const file of $('videoFiles').files){if(!/\.(mp4|webm)$/i.test(file.name))continue;addQueueItem({name:file.name,url:URL.createObjectURL(file),kind:'local'});}$('videoFiles').value='';};
-$('addIncluded').onclick=()=>{const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry)return status('Choose an available recording.','warning');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',preset:entry.calibration||null});};
+$('addIncluded').onclick=()=>{const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry)return status('Choose an available recording.','warning');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',preset:entry.calibration||null,visitSample:!!entry.visitSample,visitZones:entry.visitZones,detail:entry.detail});};
+$('loadEntranceSample').onclick=()=>{const entry=recordings.find(item=>item.id==='store-entrance');if(![...$('includedSelect').options].some(option=>option.value===entry.id))return status('The entrance sample is unavailable on this server.','warning');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',visitSample:true,visitZones:entry.visitZones,detail:entry.detail});loadSource(state.queue.length-1);showPage('video');status('Entrance sample loaded. Zones are estimates; adjust them to the doorway before relying on visit counts.');};
 async function loadIncludedLibrary(){try{const response=await fetch('/api/recordings');const data=await response.json();for(const entry of recordings.filter(item=>data.available.includes(item.id))){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.title;$('includedSelect').append(option);}if(data.available.includes('clip-03')){$('includedSelect').value='clip-03';$('overviewSource').textContent='A real restocking clip is ready in Video Analysis.';if(!state.queue.length){const entry=recordings.find(item=>item.id==='clip-03');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',preset:entry.calibration||null});}}}catch{status('Included recording library unavailable. Upload a local file or run the synthetic demo.','warning');}}
 function loadSource(index){
   if(index<0||index>=state.queue.length)return;
-  resetAnalysis(true);state.refs.clear();state.queueIndex=index;state.source=state.queue[index];state.source.status='Loaded';video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;status('Video loaded. Configure zones, then start local analysis.');renderAll();
+  resetAnalysis(true);state.refs.clear();state.queueIndex=index;state.source=state.queue[index];state.source.status='Loaded';
+  if(state.source.visitSample&&state.source.visitZones){state.zones=['entrance','exit'].map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=state.source.visitZones[type];return zone;});state.selectedZone=state.zones[0].id;}
+  else if(!state.zones.some(zone=>zone.type==='shelf')){state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;}
+  renderZones();video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;$('recordingDetail').textContent=state.source.detail||'Local video selected in this browser.';$('visitsSourceNote').textContent=state.source.visitSample?'Sample zone placement is approximate. The clip shows doorway motion; only matched entry and exit crossings create and delete a visit.': 'Configure entrance and exit zones for the current camera.';status('Video loaded. Configure zones, then start local analysis.');renderAll();
 }
 async function seekTo(seconds){return new Promise((resolve,reject)=>{if(!Number.isFinite(video.duration)||video.duration<=0)return reject(Error('Video has no seekable frames'));const target=clamp(seconds,0,Math.max(0,video.duration-.1));if(Math.abs(video.currentTime-target)<.03)return resolve();video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});}
 async function autoCalibrate(preset,generation){
@@ -123,13 +127,13 @@ $('pauseAnalysis').onclick=()=>{state.running=false;state.paused=true;video.paus
 $('stopAnalysis').onclick=()=>{state.running=false;state.paused=false;video.pause();clearTimers();if(state.source)state.source.status='Stopped';renderAll();};
 $('resetAnalysis').onclick=()=>{resetAnalysis(false);$('sessionName').textContent='No video selected';status('Session reset. All temporary tracking and local events were cleared.');};
 
-const eventTitles={PERSON_ENTERED:'Person entered',DWELL_THRESHOLD:'Dwell threshold reached',PRODUCT_INTERACTION:'Possible shelf interaction',PRODUCT_REMOVED:'Possible product removal',PRODUCT_RETURNED:'Possible product return',SHELF_LOW:'Shelf running low',SHELF_EMPTY:'Shelf empty',RESTOCK_DETECTED:'Restock inferred',QUEUE_BUILDUP:'Queue buildup',LONG_WAIT:'Long observed wait',CHECKOUT_CONGESTION:'Checkout congestion'};
+const eventTitles={PERSON_ENTERED:'Entrance crossing',PERSON_EXITED:'Exit crossing',DWELL_THRESHOLD:'Dwell threshold reached',PRODUCT_INTERACTION:'Possible shelf interaction',PRODUCT_REMOVED:'Possible product removal',PRODUCT_RETURNED:'Possible product return',SHELF_LOW:'Shelf running low',SHELF_EMPTY:'Shelf empty',RESTOCK_DETECTED:'Restock inferred',QUEUE_BUILDUP:'Queue buildup',LONG_WAIT:'Long observed wait',CHECKOUT_CONGESTION:'Checkout congestion'};
 const actionFor=type=>({SHELF_LOW:'Check shelf stock and prepare replenishment.',SHELF_EMPTY:'Replenish this shelf now.',RESTOCK_DETECTED:'Confirm the shelf is ready for shoppers.',PRODUCT_REMOVED:'Review shelf stock after the interaction.',QUEUE_BUILDUP:'Open another checkout if staff are available.',LONG_WAIT:'Send support to checkout.',CHECKOUT_CONGESTION:'Review checkout staffing.'})[type]||null;
 const cooldown=new Map();
 function addEvent(type,zone,confidence,value,why,rule){
   if(!zone)return;
   const mediaTime=currentMediaTime(),key=type+':'+zone.id;
-  if(mediaTime-(cooldown.get(key)??-100)<4)return;
+  if(!type.startsWith('PERSON_')&&mediaTime-(cooldown.get(key)??-100)<4)return;
   cooldown.set(key,mediaTime);
   const event={id:eventCounter++,type,zone:zone.name,confidence:clamp(confidence,0,1),value,mediaTime,why,rule,action:actionFor(type),source:state.source?.name||'Synthetic demo',simulated:state.source?.kind==='synthetic',status:'Local only',privacy:'Pending'};
   state.events.unshift(event);if(state.events.length>100)state.events.length=100;
@@ -145,15 +149,38 @@ async function sendPayload(payload,event){
 }
 async function flushBuffer(){if(state.failure==='network'||state.failure==='stream'||state.failure==='privacy')return;const pending=state.buffer.splice(0);for(const item of pending)await sendPayload(item.payload,item.event);}
 
+async function visitRequest(path,payload){const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok||!data.ok)throw Error(data.reason||`Visit receiver ${response.status}`);return data;}
+async function fetchVisits(){try{const response=await fetch('/api/visits');if(!response.ok)return;const data=await response.json();if(!Array.isArray(data.active))return;state.visitSnapshot=data;renderVisits();$('overviewVisits').textContent=String(data.activeCount);}catch{$('visitsRows').textContent='Local visit receiver unavailable.';}}
+async function clearVisits(){try{await visitRequest('/api/visits/clear',{type:'visit_clear'});await fetchVisits();}catch{/* The server may be restarting; visible status is refreshed by polling. */}}
+function openVisit(track,zone){
+  const generation=state.generation;
+  const pending=(async()=>{try{const result=await visitRequest('/api/visits/open',{type:'visit_open'});if(generation!==state.generation){await visitRequest('/api/visits/close',{type:'visit_close',visitId:result.visitId});return null;}state.footfallIds.add(track.id);addEvent('PERSON_ENTERED',zone,track.score,1,'A temporary person track crossed from outside the configured entrance zone into it.','Observed entrance-zone transition; random server visit token created.');await fetchVisits();return result.visitId;}catch{status('An entrance crossing was seen, but the local visit receiver could not create a record.','warning');return null;}})();
+  state.visitsByTrack.set(track.id,pending);
+}
+async function closeVisit(track,zone){
+  const pending=state.visitsByTrack.get(track.id);if(!pending)return;state.visitsByTrack.delete(track.id);
+  try{const visitId=await pending;if(!visitId)return;await visitRequest('/api/visits/close',{type:'visit_close',visitId});addEvent('PERSON_EXITED',zone,track.score,1,'The same temporary track crossed the configured exit zone; its server record was deleted.','Observed exit-zone transition; matching anonymous visit token removed.');await fetchVisits();}catch{status('Exit crossing seen, but the visit record could not be deleted. It will expire automatically.','warning');}
+}
+function renderVisits(){const visits=state.visitSnapshot;$('visitsActive').textContent=String(visits.activeCount);$('visitsOpened').textContent=String(visits.opened);$('visitsExited').textContent=String(visits.exited);$('visitsExpired').textContent=String(visits.expired);$('visitsRows').replaceChildren(...(visits.active.length?visits.active.map(visit=>{const row=document.createElement('div');row.className='visit-row';const id=document.createElement('code');id.textContent=`Visit ${visit.visitId.slice(0,8)}`;const time=document.createElement('span');time.textContent=`Opened ${new Date(visit.enteredAt).toLocaleTimeString()}`;row.append(id,time);return row;}):[document.createTextNode('No active visits. Records disappear after an observed exit or a two-minute timeout.') ]));}
+setInterval(()=>{void fetchVisits();},2000);
+
 function addSample(){const t=currentMediaTime();state.samples.push({time:t,people:state.detected.filter(d=>d.class==='person').length,queue:[...state.queueCounts.values()].reduce((a,b)=>a+b,0)});if(state.samples.length>120)state.samples.shift();}
 function analyzePeople(detections){
   const people=detections.filter(d=>d.class==='person');
+  const previousZones=new Map([...state.tracks].map(([id,track])=>[id,track.zoneId]));
   const result=updateTemporaryTracks(state.tracks,people,currentMediaTime(),state.zones,state.nextTrackId);state.tracks=result.tracks;state.nextTrackId=result.nextId;
+  const changed=new Set(result.entered);
+  for(const id of state.visitsByTrack.keys())if(!state.tracks.has(id))state.visitsByTrack.delete(id);
   state.queueCounts.clear();
   for(const track of state.tracks.values()){
     const zone=zoneById(track.zoneId);if(!zone)continue;
     const hx=Math.min(11,Math.floor(track.x*12)),hy=Math.min(7,Math.floor(track.y*8));state.heat[hy*12+hx]++;
-    if(zone.type==='entrance'&&!state.footfallIds.has(track.id)){state.footfallIds.add(track.id);addEvent('PERSON_ENTERED',zone,track.score,1,'A person box crossed the configured entrance rectangle.','Footpoint entered entrance zone.');}
+    if(changed.has(track.id)&&state.zones.some(z=>z.type==='entrance')&&state.zones.some(z=>z.type==='exit')){
+      const previousType=zoneById(previousZones.get(track.id))?.type||null;
+      const transition=visitTransition(previousType,zone.type,previousZones.has(track.id),state.visitsByTrack.has(track.id));
+      if(transition==='enter')openVisit(track,zone);
+      if(transition==='exit')void closeVisit(track,zone);
+    }
     if(zone.type==='queue'){
       state.queueCounts.set(zone.id,(state.queueCounts.get(zone.id)||0)+1);
       const dwell=currentMediaTime()-track.zoneEnteredAt;
@@ -234,7 +261,7 @@ function renderAll(){
   const actionEvent=state.events.find(e=>e.action),shelfValue=Number.isFinite(shelf)?Math.round(shelf):null;
   $('overviewShelf').textContent=shelfValue===null?'Awaiting analysis':shelfValue<=15?'Empty':shelfValue<=25?'Low stock':'Stocked';
   $('overviewShelfDetail').textContent=shelfValue===null?'Requires calibrated shelf frames':`${shelfValue}% estimated occupancy · ${simulated?'SIMULATED':'DERIVED'}`;
-  $('overviewPeople').textContent=state.model?String(people.length):'—';$('overviewQueue').textContent=state.model&&state.zones.some(z=>z.type==='queue')?String(queue):'—';
+  $('overviewPeople').textContent=state.model?String(people.length):'—';$('overviewVisits').textContent=String(state.visitSnapshot.activeCount);
   $('overviewFeedStatus').textContent=state.running?'ANALYZING':state.source?.status?.toUpperCase()||'NO SOURCE';
   $('overviewAction').textContent=actionEvent?.action||'No action needed';$('overviewActionDetail').textContent=actionEvent?`${eventTitles[actionEvent.type]} in ${actionEvent.zone} at ${formatTime(actionEvent.mediaTime)} · ${actionEvent.simulated?'SIMULATED':'DERIVED'}`:'Actions appear when analysis finds an operational issue.';
   $('overviewActivity').replaceChildren(...(state.events.length?state.events.slice(0,4).map(e=>{const row=node('button','', 'activity-item');row.append(node('span',eventTitles[e.type]),node('small',`${e.zone} · ${formatTime(e.mediaTime)} · ${e.simulated?'SIMULATED':'VIDEO'}`));row.onclick=()=>{showPage('events');state.selectedEvidence=e;renderEvidence(e);};return row;}):[node('p','No activity yet. Start video analysis to see events.')]));
@@ -247,7 +274,7 @@ function renderAll(){
   $('inspectZone').textContent=state.selectedZone?zoneById(state.selectedZone)?.name||'—':'—';$('inspectEvent').textContent=state.events[0]?`${eventTitles[state.events[0].type]} · ${state.events[0].zone}`:'—';$('inspectPrivacy').textContent=state.failure==='privacy'?'BLOCKED · filter unavailable':state.lastOutbound?'PASS · anonymous fields only':'No outbound event yet';
   const memory=performance.memory?.usedJSHeapSize;const health=[['Camera / video',state.failure==='camera'?'OFFLINE · simulated':state.source?.status||'No source'],['AI model',state.modelStatus],['Model version',state.modelVersion],['Inference FPS',state.model&&state.running?String(state.fps):'Not available'],['Inference latency',state.latency===null?'Not available':`${state.latency} ms`],['CPU','Not available from browser'],['Memory',memory?`${Math.round(memory/1048576)} MB JS heap`:'Not available from browser'],['Analyzed samples',String(state.frames)],['Event queue depth',String(state.buffer.length)],['Network',state.failure==='network'?'OFFLINE · simulated':'Local connection'],['Privacy filter',state.failure==='privacy'?'PRIVACY BLOCKED':'Healthy'],['Last successful event',state.lastSuccessfulEvent?.toLocaleTimeString()||'None']];$('healthGrid').replaceChildren(...health.map(([a,b])=>metric(a,b,'CURRENT SESSION')));
   $('outboundPayload').textContent=state.lastOutbound?JSON.stringify(state.lastOutbound,null,2):'No event sent yet.';$('privacyAudit').textContent=`${state.privacyViolations} blocked payload${state.privacyViolations===1?'':'s'} this session. Temporary track IDs and frame coordinates stay in browser memory.`;
-  renderQueue();renderEvents();
+  renderQueue();renderEvents();renderVisits();
   const provenance=simulated?'SIMULATED':state.source?'DERIVED FROM CURRENT VIDEO':'NO VIDEO';const metrics=[['Footfall',state.model?String(state.footfallIds.size):'Not available',state.model?'DERIVED · ENTRANCE ZONE':'NEEDS PERSON DETECTION'],['Shelf occupancy',Number.isFinite(shelf)?`${Math.round(shelf)}%`:'Not available',Number.isFinite(shelf)?provenance+' · CALIBRATED REFERENCES':'NEEDS EMPTY + STOCKED REFERENCES'],['Queue length',state.model&&state.zones.some(z=>z.type==='queue')?String(queue):'Not available',state.model?'DERIVED · CHECKOUT ZONE':'NEEDS PERSON DETECTION + QUEUE ZONE'],['Observed queue dwell',state.dwellSamples.length?`${Math.round(Math.max(...state.dwellSamples))} s`:'Not available',state.dwellSamples.length?provenance:'NO WAIT OBSERVED'],['Operational alerts',String(state.events.filter(e=>e.action).length),provenance],['Anonymous events',String(state.events.length),provenance]];$('metricGrid').replaceChildren(...metrics.map(m=>metric(...m)));renderCharts();
   $('layoutLegend').replaceChildren(...(state.zones.length?state.zones.map(z=>node('p',`${z.name} · ${z.type} · ${z.type==='shelf'?(state.shelfPercents.has(z.id)?Math.round(state.shelfPercents.get(z.id))+'% stocked':'needs references'):z.type==='queue'?(state.model?(state.queueCounts.get(z.id)||0)+' people':'needs model'):'configured'}`)): [node('p','Configure zones to see local traffic and alert status.')]));
   const actions=state.events.filter(e=>e.action);$('insightList').replaceChildren(...(actions.length?actions.slice(0,10).map(e=>{const card=node('div','', 'panel');card.append(node('h2',eventTitles[e.type]),node('p',e.action),node('small',`${e.zone} · ${formatTime(e.mediaTime)} · ${e.simulated?'SIMULATED':'DERIVED'}`));const button=node('button','View evidence');button.onclick=()=>{showPage('events');state.selectedEvidence=e;renderEvidence(e);};card.append(button);return card;}):[node('div','No recommendation yet. Run analysis to generate evidence based actions.','panel')]));
@@ -257,5 +284,5 @@ $('privacyProbe').onclick=async()=>{const invalid={type:'retail_signal',shelf_id
 const failureMessages={camera:'Camera lost: video analysis paused. No new frame events are generated.',model:'Model failure: person and queue detections stop. Calibrated shelf comparison can continue.',stream:'Event stream offline: validated events buffer locally until restored.',network:'Network disconnected: validated events buffer locally until restored.',privacy:'Privacy filter unavailable: outbound events are blocked.',corrupt:'Corrupt video: analysis stopped. Choose another recording.'};
 for(const button of document.querySelectorAll('[data-failure]'))button.onclick=()=>{state.failure=button.dataset.failure;if(['camera','corrupt'].includes(state.failure)){state.running=false;video.pause();}if(state.failure==='model'){state.model=null;state.modelStatus='Unavailable: simulated model failure';state.detected=[];state.tracks.clear();}$('recoveryResult').textContent=`SIMULATED FAILURE · ${failureMessages[state.failure]}`;renderAll();};
 $('restoreSystem').onclick=()=>{const previous=state.failure;state.failure=null;if(previous==='model')state.modelStatus='Not loaded · start analysis to reload';$('recoveryResult').textContent='System restored. Buffered anonymous events are being delivered to the local receiver.';void flushBuffer();renderAll();};
-state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;renderZones();renderAll();renderCanvas();void loadIncludedLibrary();
+state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;renderZones();renderAll();renderCanvas();void loadIncludedLibrary();void fetchVisits();
 
