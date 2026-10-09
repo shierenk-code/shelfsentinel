@@ -29,11 +29,11 @@ Open http://127.0.0.1:8787/ . If that port is occupied, set `$env:PORT='8790'` b
 
 ## Use the product
 
-1. **Overview:** Read store status, a recommended action, observed entry and exit counts, shelf condition, and recent signals. It does not duplicate the video analyzer.
-2. **Entry & Exit:** Choose one of the two doorway recordings. Selection loads that exact clip automatically; press **Start Analysis**. Temporary anonymous visit records appear for observed entrance crossings and disappear after a matching exit or a two-minute timeout. Zone positions are estimates, and these sample clips may not show a matched exit.
-3. **Shelf Maintenance:** Choose one of the local shelf recordings, then press **Start Analysis**. The middle-shelf restocking clip includes automatic empty/stocked calibration. Other clips need reference frames for an occupancy estimate. Set the low-stock percentage on this page, then inspect shelf events, evidence, and recommended actions. **Run sample shelf scenario** is a labeled simulation.
+1. **Overview:** See the store name and date, estimated people inside, observed entries and exits, active anonymous records, and the last measured shelf condition. This page is a summary without a video analyzer.
+2. **Entry & Exit:** Choose one of the two doorway recordings and press **Start Analysis**. The table below the video shows anonymous entry and matched-exit observations. An active server record is deleted on a matched exit or after a two-minute timeout. Zone positions are estimates, and these sample clips may not show a matched exit.
+3. **Shelf Maintenance:** Choose a shelf recording and press **Start Analysis**. The table below the video shows estimated visible stock, empty space, status, and observation time for the monitored shelf. Set the low-stock limit here. The middle-shelf restocking clip calibrates automatically; expand **Calibrate a different shelf video** for other camera angles. These percentages are visual estimates, not exact product or SKU counts.
 
-The recording selector and queue on each page show only videos for that use case. Switching pages reloads the last selected video for that page from the start. Only one video is analyzed at a time; switching pages stops the current analysis.
+The recording selector on each analysis page shows only videos for that use case. Switching pages reloads the last selected video for that page from the start. Only one video is analyzed at a time; switching pages stops the current analysis. The entry/exit table is a browser-session log, while active visit records live only in the local server's memory.
 
 ## Recordings
 

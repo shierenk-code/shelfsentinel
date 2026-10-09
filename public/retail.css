@@ -69,3 +69,20 @@ body.dark .overview-health-card{background:linear-gradient(135deg,#0a281d,#184d3
 .recording-card.selected{background:var(--accent-soft);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 #shelfClipList .recording-card,#entryClipList .recording-card{padding:13px 14px;font-size:12px}
 @media(max-width:750px){.visit-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Three focused product pages. Keep legacy data nodes mounted for the analyzer. */
+#overview>:not(.overview-simple){display:none!important}
+.overview-simple{display:block}.store-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin:5px 0 25px}.store-heading h1{font-size:34px;letter-spacing:-1px;margin:3px 0}.store-heading p{margin:0;color:var(--muted)}.store-heading .eyebrow{font-size:11px;font-weight:800;letter-spacing:1.2px;color:var(--accent)}.store-heading>strong{font-size:12px;color:var(--muted);white-space:nowrap}.overview-simple-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.overview-simple-grid .panel{min-height:190px;padding:23px}.overview-simple-grid h2{font-size:18px}.overview-simple-grid p{font-size:13px;color:var(--muted);min-height:45px}.overview-inventory-row{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0 12px}.overview-inventory-row strong{color:var(--accent)}.overview-privacy-note{font-size:11px;color:var(--muted);margin-top:8px}
+#entry .recording-library,#shelf .recording-library{display:none}
+#entry #visits,#shelf #events,#shelf #operations,#shelf #insights,#shelf #recovery{display:none}
+.advanced-zone{margin:0 0 20px;color:var(--muted)}.advanced-zone>summary{cursor:pointer;color:var(--accent);font-weight:700;padding:10px 0}.advanced-zone #zones{border:0;margin:0;padding:8px 0}.advanced-zone #zones>.page-heading{display:none}
+#entry #video,#shelf #video{border:0;padding:0;margin:0 0 18px}
+#entry #video>.page-heading,#shelf #video>.page-heading{display:none}
+#entry #video>.two,#shelf #video>.two{display:block}
+#entry #video>.two>.panel:first-child,#shelf #video>.two>.panel:first-child{max-width:900px}
+#entry #video>.two>.panel:nth-child(2),#shelf #video>.two>.panel:nth-child(2),#entry #video>.panel:last-child,#shelf #video>.panel:last-child{display:none}
+#entry .workflow-stats .summary-card,#shelf .shelf-settings .summary-card{min-height:94px}
+#entry .workflow-stats .summary-card strong,#shelf .shelf-settings .summary-card strong{font-size:22px}
+#entry table,#shelf table{font-size:12px}#entry th,#entry td,#shelf th,#shelf td{padding:12px 10px}#entry tbody tr,#shelf tbody tr{cursor:default}#entry tbody tr:hover,#shelf tbody tr:hover{background:transparent}
+#entry #videoQueue,#shelf #videoQueue,#entry #nextVideo,#shelf #nextVideo{display:none}
+#entry #recordingDetail,#shelf #recordingDetail{max-width:760px}
+@media(max-width:750px){.store-heading{align-items:flex-start;flex-direction:column}.overview-simple-grid{grid-template-columns:1fr}.overview-simple .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
