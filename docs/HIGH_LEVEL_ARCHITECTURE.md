@@ -2,6 +2,8 @@
 
 ShelfSentinel is a privacy-first, single-store analytics prototype. A store team selects a recording, the browser analyzes it locally, and the server receives only small anonymous operational events.
 
+![ShelfSentinel high-level workflow](high-level-workflow.svg)
+
 ## System view
 
 ```mermaid
