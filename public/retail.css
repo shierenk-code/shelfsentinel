@@ -60,4 +60,12 @@ body.dark .overview-health-card{background:linear-gradient(135deg,#0a281d,#184d3
 @media(max-width:1050px){.overview-command-grid,.overview-detail-grid{grid-template-columns:1fr}}
 @media(max-width:750px){#overview .overview-hero{align-items:flex-start}.overview-command-grid .panel{min-height:165px}.overview-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.overview-kpis{grid-template-columns:1fr}.overview-workflow{align-items:flex-start;flex-direction:column}.overview-workflow button{align-self:flex-start}}
+.recording-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:9px;margin-top:12px}
+#video.entry-mode .shelf-only,#video .secondary-only{display:none!important}
+.recording-card{display:block;text-align:left;min-height:96px;padding:13px 14px;border-color:var(--line);color:inherit}
+.recording-card strong,.recording-card small{display:block}
+.recording-card strong{font-size:12px;line-height:1.35;color:var(--accent);margin-bottom:7px}
+.recording-card small{font-size:10px;line-height:1.45;color:var(--muted);font-weight:400}
+.recording-card.selected{background:var(--accent-soft);border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+#shelfClipList .recording-card,#entryClipList .recording-card{padding:13px 14px;font-size:12px}
 @media(max-width:750px){.visit-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}

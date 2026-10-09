@@ -15,18 +15,15 @@ Open http://127.0.0.1:8787/ . If that port is occupied, set `$env:PORT='8790'` b
 
 ## Use the product
 
-1. **Overview:** Monitor the store feed, shelf status, active anonymous visits, activity, and recommended action.
-2. **Video sources:** The local 21-second restocking recording is preloaded when present. Press **Start Analysis**. The first load may take a few seconds while the bundled model initializes. Alternatively press **Run guided demo** for a clearly labeled simulated shelf.
-3. **Visits:** Load the included grocery entrance sample, start analysis, and watch anonymous visit records appear when a tracked person crosses the entrance zone. A matching exit-zone crossing deletes the record. A record also expires after two minutes if an exit cannot be observed. The included zones are estimates; adjust them to the doorway for reliable counts.
-4. **Store Zones:** Draw a rectangle to configure a shelf, queue, entrance, exit, promotion, or ignored area. Shelf estimates require an empty and a stocked reference. The included restocking clip prepares these automatically; other footage needs manual captures.
-4. **Event Stream:** Select a row to inspect its video time, detected evidence, rule, confidence, privacy result, delivery status, and recommended action.
-5. **Privacy Inspector:** Compare the local frame with the exact outbound JSON. The JSON contains only an event type, shelf identifier, time, zone name, confidence, and value. The forbidden-payload probe demonstrates local rejection.
-6. **Operations and Insights & Actions:** Read metrics from the active session and open an action's evidence. Missing observations show “Not available from current model.”
-7. **System health:** Trigger a labeled failure simulation. Network and stream failures buffer validated events; privacy failure blocks them. Restore to flush buffered events.
+1. **Overview:** Read store status, a recommended action, observed entry and exit counts, shelf condition, and recent signals. It does not duplicate the video analyzer.
+2. **Entry & Exit:** Choose one of the two doorway recordings. Selection loads that exact clip automatically; press **Start Analysis**. Temporary anonymous visit records appear for observed entrance crossings and disappear after a matching exit or a two-minute timeout. Zone positions are estimates, and these sample clips may not show a matched exit.
+3. **Shelf Maintenance:** Choose one of the local shelf recordings, then press **Start Analysis**. The middle-shelf restocking clip includes automatic empty/stocked calibration. Other clips need reference frames for an occupancy estimate. Set the low-stock percentage on this page, then inspect shelf events, evidence, and recommended actions. **Run sample shelf scenario** is a labeled simulation.
+
+The recording selector and queue on each page show only videos for that use case. Switching pages reloads the last selected video for that page from the start. Only one video is analyzed at a time; switching pages stops the current analysis.
 
 ## Recordings
 
-The page lists only recordings actually present in `public/recordings`. Two public demonstration clips are included in Git: [grocery entrance](https://www.pexels.com/video/people-going-inside-a-store-with-automatic-sliding-doors-6641527/) and [building entrance/exit](https://www.pexels.com/video/people-walking-passing-through-a-revolving-glass-door-4077491/), both from Pexels under its [free-use license](https://www.pexels.com/license/). These are sample videos, not a calibrated store dataset or proof that the same person enters and exits. Other local recordings remain excluded from Git. You can also upload MP4/WebM files in Video Analysis; selected files stay in the browser session. No raw frames are posted to `/api/events` or `/api/visits`.
+The page lists only recordings actually present in `public/recordings`. Two public demonstration clips are included in Git: [grocery entrance](https://www.pexels.com/video/people-going-inside-a-store-with-automatic-sliding-doors-6641527/) and [revolving building door](https://www.pexels.com/video/people-walking-passing-through-a-revolving-glass-door-4077491/), both from Pexels under its [free-use license](https://www.pexels.com/license/). These are sample videos, not proof that the same person enters and exits. The ten local shelf recordings are excluded from Git. Their labels describe the visible content; short reference clips are marked as such. You can also upload MP4/WebM files on the relevant use-case page; selected files stay in the browser session. No raw frames are posted to `/api/events` or `/api/visits`.
 
 ## What the model can and cannot do
 

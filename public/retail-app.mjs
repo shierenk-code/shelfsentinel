@@ -7,9 +7,9 @@ import {loadLocalDetector} from './model-bundle.mjs';
 const $=id=>document.getElementById(id),video=$('videoElement');
 const dashboard=document.querySelector('main');
 const entryPage=document.createElement('section');entryPage.id='entry';entryPage.className='page';
-entryPage.innerHTML='<div class="page-heading"><p class="eyebrow">STORE PRESENCE</p><h1>Entry &amp; Exit</h1><p>Analyze the doorway video, see how many visits remain active, and inspect entry or exit evidence here.</p></div>';
+entryPage.innerHTML='<div class="page-heading"><p class="eyebrow">STORE PRESENCE</p><h1>Entry &amp; Exit</h1><p>Analyze doorway footage, see how many visits remain active, and inspect the crossing evidence here.</p></div><div class="panel"><h2>Doorway recordings</h2><p class="subtle">These are public sample clips. Choose one and the analyzer below will load that exact video.</p><div id="entryClipList" class="recording-grid"></div></div>';
 const shelfPage=document.createElement('section');shelfPage.id='shelf';shelfPage.className='page';
-shelfPage.innerHTML='<div class="page-heading"><p class="eyebrow">SHELF OPERATIONS</p><h1>Shelf Maintenance</h1><p>Choose one of your recorded shelf clips, analyze stock changes, set a low-stock limit, and review the resulting evidence and actions.</p></div><div class="panel"><h2>Your shelf recordings</h2><p class="subtle">Choose a clip, then press Start Analysis below. The middle-shelf restocking clip includes automatic calibration; other angles may need empty and stocked references.</p><div id="shelfClipList" class="video-queue"></div></div><div class="panel"><h2>Inventory signal &amp; stock limit</h2><div class="summary-grid"><article class="summary-card"><span>Estimated shelf level</span><strong id="shelfInventoryLevel">Not calibrated</strong><small>Image comparison; not an item count</small></article><article class="summary-card"><span>Stock status</span><strong id="shelfInventoryStatus">Awaiting analysis</strong><small id="shelfInventoryDetail">Run a calibrated shelf recording</small></article><article class="summary-card"><span>Low-stock limit</span><strong id="shelfLimitValue">25%</strong><small>Alert when estimate falls below this</small></article><article class="summary-card"><span>Recommended response</span><strong id="shelfInventoryAction">None yet</strong><small>Based on observed shelf events</small></article></div><label>Set low-stock limit (%) <input id="shelfLimitInput" type="number" min="1" max="90" value="25"></label><button id="saveShelfLimit">Save limit</button><p class="subtle">This measures visual shelf occupancy. It cannot count exact products or SKUs from these videos.</p></div>';
+shelfPage.innerHTML='<div class="page-heading"><p class="eyebrow">SHELF OPERATIONS</p><h1>Shelf Maintenance</h1><p>Choose one of your recorded shelf clips, analyze stock changes, set a low-stock limit, and review the resulting evidence and actions.</p></div><div class="panel"><h2>Your shelf recordings</h2><p class="subtle">Select a clip to load it below. Restocking the middle shelf includes automatic calibration; the brief and wide views are reference footage.</p><div id="shelfClipList" class="recording-grid"></div></div><div class="panel"><h2>Inventory signal &amp; stock limit</h2><div class="summary-grid"><article class="summary-card"><span>Estimated shelf level</span><strong id="shelfInventoryLevel">Not calibrated</strong><small>Image comparison; not an item count</small></article><article class="summary-card"><span>Stock status</span><strong id="shelfInventoryStatus">Awaiting analysis</strong><small id="shelfInventoryDetail">Run a calibrated shelf recording</small></article><article class="summary-card"><span>Low-stock limit</span><strong id="shelfLimitValue">25%</strong><small>Alert when estimate falls below this</small></article><article class="summary-card"><span>Recommended response</span><strong id="shelfInventoryAction">None yet</strong><small>Based on observed shelf events</small></article></div><label>Set low-stock limit (%) <input id="shelfLimitInput" type="number" min="1" max="90" value="25"></label><button id="saveShelfLimit">Save limit</button><p class="subtle">This measures visual shelf occupancy. It cannot count exact products or SKUs from these videos.</p></div>';
 const demoButton=$('overviewDemo');demoButton.hidden=false;demoButton.textContent='Run sample shelf scenario';shelfPage.querySelector('.page-heading').append(demoButton);
 dashboard.insertBefore(entryPage,$('visits'));
 dashboard.insertBefore(shelfPage,$('visits'));
@@ -18,6 +18,8 @@ entryPage.append($('video'),$('visits'));
 shelfPage.append($('zones'),$('events'),$('operations'),$('insights'));
 $('overview').append($('privacy'));
 shelfPage.append($('recovery'));
+for(const id of ['inspectObjects','inspectInteraction'])$(id).parentElement.classList.add('shelf-only');
+$('inspectQueue').parentElement.classList.add('secondary-only');
 const canvases={overview:$('overviewCanvas'),video:$('videoCanvas'),zone:$('zoneCanvas'),privacy:$('privacyCanvas')};
 const contexts=Object.fromEntries(Object.entries(canvases).map(([key,canvas])=>[key,canvas.getContext('2d')]));
 const sampleCanvas=document.createElement('canvas');sampleCanvas.width=6;sampleCanvas.height=3;
@@ -25,6 +27,9 @@ const sampleContext=sampleCanvas.getContext('2d',{willReadFrequently:true});
 const syntheticCanvas=document.createElement('canvas');syntheticCanvas.width=640;syntheticCanvas.height=360;
 const syntheticContext=syntheticCanvas.getContext('2d');
 const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,paused:false,model:null,modelStatus:'Not loaded',modelVersion:'COCO-SSD lite MobileNet v2',failure:null,frames:0,fps:0,latency:null,lastInference:0,lastFrameAt:0,lastSampleAt:0,detected:[],tracks:new Map(),nextTrackId:1,heat:Array(96).fill(0),events:[],insights:[],samples:[],buffer:[],lastOutbound:null,lastSuccessfulEvent:null,privacyViolations:0,zones:[],selectedZone:null,refs:new Map(),shelfPercents:new Map(),previousVectors:new Map(),lastStockStates:new Map(),queueCounts:new Map(),footfallIds:new Set(),dwellSamples:[],visitsByTrack:new Map(),visitEvidence:new Map(),visitSnapshot:{activeCount:0,opened:0,exited:0,expired:0,active:[]},guideStep:0,syntheticPercent:100,syntheticTimers:[],generation:0};
+const availableRecordingIds=new Set(),lastQueueIndex={entry:-1,shelf:-1};
+const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,visitSample:!!entry.visitSample,visitZones:entry.visitZones,detail:entry.detail});
+const sourcePurpose=item=>item?.purpose||(item?.visitSample?'entry':'shelf');
 let zoneCounter=1,eventCounter=1,inferenceBusy=false;
 const videoReady=()=>state.source?.kind!=='synthetic'&&video.readyState>=2;
 const currentMediaTime=()=>state.source?.kind==='synthetic'?(performance.now()-state.syntheticStarted)/1000:video.currentTime||0;
@@ -36,11 +41,15 @@ const status=(message,type='info')=>{const box=$('notice');clearTimeout(noticeTi
 
 function showPage(page){
   if(!$(page))return;
-  const tab=page==='overview'||page==='privacy'?'overview':page==='entry'||page==='visits'?'entry':page==='shelf'||['zones','events','operations','insights','recovery'].includes(page)?'shelf':state.source?.visitSample?'entry':'shelf';
+  const tab=page==='overview'||page==='privacy'?'overview':page==='entry'||page==='visits'?'entry':page==='shelf'||['zones','events','operations','insights','recovery'].includes(page)?'shelf':sourcePurpose(state.source)==='entry'?'entry':'shelf';
   state.page=tab;
+  if(tab==='entry'||tab==='shelf'){renderRecordingOptions(tab);ensureSourceForTab(tab);}
   if(tab==='entry')entryPage.insertBefore($('video'),$('visits'));
   if(tab==='shelf')shelfPage.insertBefore($('video'),$('zones'));
+  $('video').classList.toggle('entry-mode',tab==='entry');
   $('video').querySelector('h1').textContent=tab==='entry'?'Doorway video analyzer':'Shelf video analyzer';
+  $('inspectPeople').closest('.panel').querySelector('h2').textContent=tab==='entry'?'Doorway detection':'Shelf detection';
+  $('videoUseCaseDescription').textContent=tab==='entry'?'Doorway recordings only. Select one to load it, then start local entry and exit analysis.':'Shelf recordings only. Select one to load it, then start local shelf analysis.';
   for(const el of document.querySelectorAll('.page'))el.classList.toggle('active',el.id===tab);
   for(const el of document.querySelectorAll('.nav'))el.classList.toggle('active',el.dataset.target===tab);
   $('pageTitle').textContent={overview:'Overview',entry:'Entry & Exit',shelf:'Shelf Maintenance'}[tab];
@@ -80,10 +89,10 @@ function drawFrame(ctx,withBoxes=true){
 function renderCanvas(){for(const [key,ctx] of Object.entries(contexts))drawFrame(ctx,key!=='zone');requestAnimationFrame(renderCanvas);}
 
 function clearTimers(){for(const timer of state.syntheticTimers)clearTimeout(timer);state.syntheticTimers=[];}
-function resetAnalysis(keepQueue=true){
+function resetAnalysis(keepQueue=true,clearVisitStore=true){
   state.generation++;clearTimers();state.running=false;state.paused=false;video.pause();
-  state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.footfallIds.clear();state.dwellSamples=[];state.visitsByTrack.clear();state.visitEvidence.clear();state.visitSnapshot={activeCount:0,opened:0,exited:0,expired:0,active:[]};state.failure=null;state.guideStep=0;cooldown.clear();void clearVisits();
-  if(!keepQueue){for(const item of state.queue)if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);state.queue=[];state.queueIndex=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();}
+  state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.footfallIds.clear();state.dwellSamples=[];state.visitsByTrack.clear();if(clearVisitStore){state.visitEvidence.clear();state.visitSnapshot={activeCount:0,opened:0,exited:0,expired:0,active:[]};void clearVisits();}state.failure=null;state.guideStep=0;cooldown.clear();
+  if(!keepQueue){for(const item of state.queue)if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);state.queue=[];state.queueIndex=-1;lastQueueIndex.entry=-1;lastQueueIndex.shelf=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();}
   renderAll();
 }
 
@@ -115,20 +124,64 @@ $('zoneCanvas').onpointerdown=event=>{const rect=canvases.zone.getBoundingClient
 $('zoneCanvas').onpointerup=event=>{if(!drawStart)return;const rect=canvases.zone.getBoundingClientRect(),end={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};const x=Math.min(drawStart.x,end.x),y=Math.min(drawStart.y,end.y),w=Math.abs(end.x-drawStart.x),h=Math.abs(end.y-drawStart.y);drawStart=null;if(w<.04||h<.04)return status('Draw a larger rectangle.','warning');let zone=zoneById(state.selectedZone);if(!zone){zone=zoneDefaults();state.zones.push(zone);state.selectedZone=zone.id;}Object.assign(zone,{x,y,w,h});state.refs.delete(zone.id);renderZones();renderAll();status(`${zone.name} area updated. Capture new shelf references if needed.`);};
 
 function renderQueue(){
-  const box=$('videoQueue');if(!state.queue.length){box.textContent='No videos queued. Upload a file or choose an included recording.';return;}
-  box.replaceChildren(...state.queue.map((item,index)=>{const button=document.createElement('button');button.textContent=`${index+1}. ${item.name} · ${item.status}`;button.className=index===state.queueIndex?'selected':'';button.onclick=()=>{loadSource(index);showPage(state.source?.visitSample?'entry':'shelf');};return button;}));
+  const purpose=state.page==='entry'?'entry':'shelf',box=$('videoQueue');
+  const items=state.queue.map((item,index)=>({item,index})).filter(({item})=>sourcePurpose(item)===purpose);
+  if(!items.length){box.textContent=purpose==='entry'?'No doorway recordings queued. Choose a doorway sample above.':'No shelf recordings queued. Choose a shelf clip above.';return;}
+  box.replaceChildren(...items.map(({item,index})=>{const button=document.createElement('button');button.textContent=`${item.name} · ${item.status}`;button.className=index===state.queueIndex?'selected':'';button.onclick=()=>loadSource(index);return button;}));
 }
-function addQueueItem(item){state.queue.push({...item,id:crypto.randomUUID(),status:'Ready'});loadSource(state.queue.length-1);}
-$('videoFiles').onchange=()=>{for(const file of $('videoFiles').files){if(!/\.(mp4|webm)$/i.test(file.name))continue;addQueueItem({name:file.name,url:URL.createObjectURL(file),kind:'local'});}$('videoFiles').value='';};
-$('addIncluded').onclick=()=>{const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry)return status('Choose an available recording.','warning');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',preset:entry.calibration||null,visitSample:!!entry.visitSample,visitZones:entry.visitZones,detail:entry.detail});showPage(entry.visitSample?'entry':'shelf');};
-$('loadEntranceSample').onclick=()=>{const entry=recordings.find(item=>item.id==='store-entrance');if(![...$('includedSelect').options].some(option=>option.value===entry.id))return status('The entrance sample is unavailable on this server.','warning');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',visitSample:true,visitZones:entry.visitZones,detail:entry.detail});showPage('video');status('Entrance sample loaded. Press Start Analysis. Zones are estimates; adjust them to the doorway before relying on visit counts.');};
-async function loadIncludedLibrary(){try{const response=await fetch('/api/recordings');const data=await response.json();for(const entry of recordings.filter(item=>data.available.includes(item.id))){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.title;$('includedSelect').append(option);}const shelfClips=recordings.filter(item=>item.id.startsWith('clip-')&&data.available.includes(item.id));$('shelfClipList').replaceChildren(...shelfClips.map(entry=>{const button=document.createElement('button');button.textContent=`${entry.title} · ${entry.id}`;button.title=entry.detail;button.onclick=()=>{addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',preset:entry.calibration||null,detail:entry.detail});showPage('shelf');status(`${entry.title} loaded. Press Start Analysis.`);};return button;}));if(!shelfClips.length)$('shelfClipList').textContent='No shelf recordings are available on this server.';if(data.available.includes('clip-03')){$('includedSelect').value='clip-03';$('overviewSource').textContent='A real restocking clip is ready in Shelf Maintenance.';if(!state.queue.length){const entry=recordings.find(item=>item.id==='clip-03');addQueueItem({name:entry.title,url:'/recordings/'+entry.file,kind:'included',preset:entry.calibration||null});}}}catch{status('Included recording library unavailable. Upload a local file or run the synthetic demo.','warning');}}
+function addQueueItem(item){state.queue.push({...item,purpose:sourcePurpose(item),id:crypto.randomUUID(),status:'Ready'});loadSource(state.queue.length-1);}
+function activateRecording(entry){const existing=state.queue.findIndex(item=>item.recordingId===entry.id);if(existing>=0)loadSource(existing);else addQueueItem(recordingItem(entry));}
+function renderRecordingOptions(purpose){
+  const select=$('includedSelect'),current=state.source?.recordingId;
+  select.replaceChildren();
+  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=purpose==='entry'?'Choose doorway video':'Choose shelf video';select.append(placeholder);
+  for(const entry of recordings.filter(item=>item.purpose===purpose&&availableRecordingIds.has(item.id))){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.title;select.append(option);}
+  select.value=current&&recordings.some(item=>item.id===current&&item.purpose===purpose)?current:'';
+  $('includedLabel').textContent=purpose==='entry'?'Doorway recording':'Shelf recording';
+}
+function ensureSourceForTab(purpose){
+  if(sourcePurpose(state.source)===purpose&&state.source)return;
+  const previous=lastQueueIndex[purpose];
+  if(previous>=0&&state.queue[previous]){loadSource(previous);return;}
+  const preferred=purpose==='entry'?'store-entrance':'clip-03';
+  const entry=recordings.find(item=>item.id===preferred&&availableRecordingIds.has(item.id))||recordings.find(item=>item.purpose===purpose&&availableRecordingIds.has(item.id));
+  if(entry)activateRecording(entry);
+  else{state.running=false;video.pause();video.removeAttribute('src');video.load();state.source=null;$('sessionName').textContent='No video selected';renderAll();}
+}
+function loadSelectedRecording(){const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry||!availableRecordingIds.has(id))return status('Choose an available recording for this page.','warning');if(entry.purpose!==state.page)return status('This recording belongs to the other use case.','warning');activateRecording(entry);status(`${entry.title} loaded. Press Start Analysis.`);}
+$('videoFiles').onchange=()=>{for(const file of $('videoFiles').files){if(!/\.(mp4|webm)$/i.test(file.name))continue;addQueueItem({name:file.name,url:URL.createObjectURL(file),kind:'local',purpose:state.page==='entry'?'entry':'shelf'});}$('videoFiles').value='';};
+$('includedSelect').onchange=loadSelectedRecording;
+$('addIncluded').textContent='Reload selected video';$('addIncluded').onclick=loadSelectedRecording;
+$('loadEntranceSample').onclick=()=>{const entry=recordings.find(item=>item.id==='store-entrance');if(!availableRecordingIds.has(entry.id))return status('The grocery entrance sample is unavailable on this server.','warning');activateRecording(entry);showPage('entry');status('Grocery doorway video loaded. Press Start Analysis. Adjust the zones before relying on counts.');};
+function renderRecordingCards(purpose){
+  const container=$(purpose==='entry'?'entryClipList':'shelfClipList');
+  const entries=recordings.filter(item=>item.purpose===purpose&&availableRecordingIds.has(item.id));
+  if(!entries.length){container.textContent=`No ${purpose==='entry'?'doorway':'shelf'} recordings are available on this server.`;return;}
+  container.replaceChildren(...entries.map(entry=>{
+    const button=document.createElement('button');button.className='recording-card';button.dataset.recordingId=entry.id;
+    const label=document.createElement('strong');label.textContent=entry.title;
+    const detail=document.createElement('small');detail.textContent=entry.detail;
+    button.append(label,detail);
+    button.onclick=()=>{activateRecording(entry);showPage(purpose);status(`${entry.title} loaded. Press Start Analysis.`);};
+    return button;
+  }));
+}
+async function loadIncludedLibrary(){
+  try{
+    const response=await fetch('/api/recordings');if(!response.ok)throw Error('Recording library unavailable');
+    const data=await response.json();for(const id of data.available)availableRecordingIds.add(id);
+    renderRecordingCards('entry');renderRecordingCards('shelf');
+    renderRecordingOptions(state.page==='entry'?'entry':'shelf');
+    if(state.page==='entry'||state.page==='shelf')ensureSourceForTab(state.page);
+  }catch{status('Included recording library unavailable. Upload a local file or run the synthetic demo.','warning');}
+}
 function loadSource(index){
   if(index<0||index>=state.queue.length)return;
-  resetAnalysis(true);state.refs.clear();state.queueIndex=index;state.source=state.queue[index];state.source.status='Loaded';
-  if(state.source.visitSample&&state.source.visitZones){state.zones=['entrance','exit'].map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=state.source.visitZones[type];return zone;});state.selectedZone=state.zones[0].id;}
-  else if(!state.zones.some(zone=>zone.type==='shelf')){state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;}
-  renderZones();video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;$('recordingDetail').textContent=state.source.detail||'Local video selected in this browser.';$('visitsSourceNote').textContent=state.source.visitSample?'Sample zone placement is approximate. This clip may show entrances without the same person leaving. Exits count only when the same temporary track crosses the orange Exit zone.':'Configure entrance and exit zones for the current camera.';status('Video loaded. Configure zones, then start local analysis.');renderAll();
+  const next=state.queue[index],purpose=sourcePurpose(next);
+  resetAnalysis(true,purpose==='entry');state.refs.clear();state.queueIndex=index;state.source=next;state.source.status='Loaded';lastQueueIndex[purpose]=index;
+  if(purpose==='entry'){state.zones=['entrance','exit'].map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=next.visitZones?.[type]||(type==='entrance'?[.2,.35,.25,.6]:[.56,.35,.25,.6]);return zone;});state.selectedZone=state.zones[0].id;}
+  else {state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;}
+  renderZones();video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;$('recordingDetail').textContent=state.source.detail||'Local video selected in this browser.';$('visitsSourceNote').textContent=purpose==='entry'?'Doorway zones are estimates. The clip may show entrances without the same person leaving. Exits count only when one continuous temporary track crosses the Exit zone.':'Load a doorway recording on Entry & Exit to count visits.';renderRecordingOptions(purpose);for(const card of document.querySelectorAll('.recording-card'))card.classList.toggle('selected',card.dataset.recordingId===next.recordingId);status('Video loaded. Configure zones, then start local analysis.');renderAll();
 }
 async function seekTo(seconds){return new Promise((resolve,reject)=>{if(!Number.isFinite(video.duration)||video.duration<=0)return reject(Error('Video has no seekable frames'));const target=clamp(seconds,0,Math.max(0,video.duration-.1));if(Math.abs(video.currentTime-target)<.03)return resolve();video.addEventListener('seeked',resolve,{once:true});video.currentTime=target;});}
 async function autoCalibrate(preset,generation){
@@ -143,10 +196,18 @@ video.onerror=()=>{$('videoError').textContent='This video could not be decoded.
 video.onended=()=>{state.running=false;state.paused=false;if(state.source)state.source.status='Complete';renderAll();};
 $('captureEmpty').onclick=()=>captureReference('empty');$('captureStocked').onclick=()=>captureReference('full');
 function captureReference(kind){const zone=zoneById(state.selectedZone);if(!zone||zone.type!=='shelf')return status('Select a shelf zone first.','warning');if(!videoReady()&&state.source?.kind!=='synthetic')return status('Load a video frame first.','warning');state.running=false;video.pause();const refs=state.refs.get(zone.id)||{};refs[kind]=sampleShelf(zone);state.refs.set(zone.id,refs);$('referenceStatus').textContent=`${zone.name}: empty ${refs.empty?'captured':'needed'} · stocked ${refs.full?'captured':'needed'}.`;status(`${kind==='full'?'Stocked':'Empty'} reference captured locally.`);renderAll();}
-$('nextVideo').onclick=()=>{if(!state.queue.length)return status('No next video in the queue.','warning');loadSource((state.queueIndex+1)%state.queue.length);};
+$('nextVideo').onclick=()=>{const purpose=state.page==='entry'?'entry':'shelf',indexes=state.queue.map((item,index)=>sourcePurpose(item)===purpose?index:-1).filter(index=>index>=0);if(!indexes.length)return status('No next video for this page.','warning');const current=indexes.indexOf(state.queueIndex);loadSource(indexes[(current+1)%indexes.length]);};
 $('pauseAnalysis').onclick=()=>{state.running=false;state.paused=true;video.pause();clearTimers();if(state.source)state.source.status='Paused';renderAll();};
 $('stopAnalysis').onclick=()=>{state.running=false;state.paused=false;video.pause();clearTimers();if(state.source)state.source.status='Stopped';renderAll();};
-$('resetAnalysis').onclick=()=>{resetAnalysis(false);$('sessionName').textContent='No video selected';status('Session reset. All temporary tracking and local events were cleared.');};
+$('resetAnalysis').onclick=()=>{
+  const purpose=state.page==='entry'?'entry':'shelf',other=purpose==='entry'?'shelf':'entry',otherItem=state.queue[lastQueueIndex[other]];
+  resetAnalysis(true,purpose==='entry');
+  for(const item of state.queue.filter(item=>sourcePurpose(item)===purpose))if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);
+  state.queue=state.queue.filter(item=>sourcePurpose(item)!==purpose);
+  lastQueueIndex[purpose]=-1;lastQueueIndex[other]=otherItem?state.queue.indexOf(otherItem):-1;
+  state.queueIndex=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();
+  $('sessionName').textContent='No video selected';renderRecordingOptions(purpose);for(const card of document.querySelectorAll('.recording-card'))card.classList.remove('selected');renderAll();status('This use case was reset. The other recording list remains available.');
+};
 
 const eventTitles={PERSON_ENTERED:'Entrance crossing',PERSON_EXITED:'Exit crossing',DWELL_THRESHOLD:'Dwell threshold reached',PRODUCT_INTERACTION:'Possible shelf interaction',PRODUCT_REMOVED:'Possible product removal',PRODUCT_RETURNED:'Possible product return',SHELF_LOW:'Shelf running low',SHELF_EMPTY:'Shelf empty',RESTOCK_DETECTED:'Restock inferred',QUEUE_BUILDUP:'Queue buildup',LONG_WAIT:'Long observed wait',CHECKOUT_CONGESTION:'Checkout congestion'};
 const actionFor=type=>({SHELF_LOW:'Check shelf stock and prepare replenishment.',SHELF_EMPTY:'Replenish this shelf now.',RESTOCK_DETECTED:'Confirm the shelf is ready for shoppers.',PRODUCT_REMOVED:'Review shelf stock after the interaction.',QUEUE_BUILDUP:'Open another checkout if staff are available.',LONG_WAIT:'Send support to checkout.',CHECKOUT_CONGESTION:'Review checkout staffing.'})[type]||null;
@@ -297,7 +358,7 @@ function runSynthetic(){
   state.syntheticPercent=0;const empty=sampleShelf(zone);state.syntheticPercent=100;const full=sampleShelf(zone);state.refs.set(zone.id,{empty,full});state.shelfPercents.set(zone.id,100);renderZones();renderAll();
   for(const [delay,percent] of [[900,68],[1900,27],[2900,0],[4800,100]])state.syntheticTimers.push(setTimeout(()=>{if(!state.running)return;state.syntheticPercent=percent;analyzeShelves();state.frames++;addSample();renderAll();if(percent===100){state.running=false;state.source.status='Complete';renderAll();}},delay));
 }
-function startGuided(){resetAnalysis(false);const item={id:crypto.randomUUID(),name:'Sample shelf scenario',kind:'synthetic',status:'Ready'};state.queue=[item];state.queueIndex=0;state.source=item;$('sessionName').textContent=item.name;showPage('video');status('Sample scenario: simulated shelf change. Every generated metric is labeled simulated.');runSynthetic();}
+function startGuided(){const entryItem=state.queue[lastQueueIndex.entry];resetAnalysis(true,false);state.refs.clear();state.queue=state.queue.filter(item=>sourcePurpose(item)==='entry');lastQueueIndex.entry=entryItem?state.queue.indexOf(entryItem):-1;const item={id:crypto.randomUUID(),name:'Sample shelf scenario',kind:'synthetic',purpose:'shelf',status:'Ready'};state.queue.push(item);state.queueIndex=state.queue.length-1;lastQueueIndex.shelf=state.queueIndex;state.source=item;$('sessionName').textContent=item.name;showPage('shelf');status('Sample scenario: simulated shelf change. Every generated metric is labeled simulated.');runSynthetic();}
 $('overviewDemo').onclick=startGuided;
 
 function node(tag,content,className=''){const el=document.createElement(tag);el.textContent=content;el.className=className;return el;}

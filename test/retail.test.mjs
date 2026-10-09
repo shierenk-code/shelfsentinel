@@ -4,6 +4,15 @@ import {zoneAtPoint,updateTemporaryTracks,shelfRule,visitTransition,safeOutbound
 import {validateEvent} from '../public/contract.mjs';
 import {createVisitStore} from '../visit-store.mjs';
 import {createServer} from '../server.mjs';
+import {recordings} from '../public/recordings.mjs';
+
+test('recordings belong to exactly one visible use case',()=>{
+  assert.equal(new Set(recordings.map(recording=>recording.id)).size,recordings.length);
+  assert.deepEqual(recordings.filter(recording=>recording.purpose==='entry').map(recording=>recording.id),['entrance-exit','store-entrance']);
+  assert.equal(recordings.filter(recording=>recording.purpose==='shelf').length,10);
+  assert.ok(recordings.every(recording=>['entry','shelf'].includes(recording.purpose)));
+  assert.ok(recordings.filter(recording=>recording.purpose==='entry').every(recording=>recording.visitSample));
+});
 
 test('retail event keeps only approved anonymous fields',()=>{
   const payload=safeOutbound({type:'SHELF_EMPTY',zone:'Shelf A',confidence:.87,value:0,personId:'private',frame:[1,2,3]});
