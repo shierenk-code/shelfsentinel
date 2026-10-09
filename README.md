@@ -2,6 +2,8 @@
 
 ShelfSentinel is a privacy-first store operations dashboard for the Flo 2026 hackathon. It helps staff answer two practical questions from store video: **How many people appear to be inside?** and **Does a shelf need attention?** Video analysis runs in the browser. The app keeps only limited, anonymous operational data in the local server's memory.
 
+For the implementation, technology stack, processing stages, and privacy boundary, see [Architecture and technology stack](docs/ARCHITECTURE.md).
+
 ## The idea in one minute
 
 A store camera can help staff react to busy entrances and low-stock shelves, but storing customer video or identifying shoppers creates a privacy problem. ShelfSentinel turns video into short-lived observations instead of customer profiles:
