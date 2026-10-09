@@ -90,3 +90,21 @@ body.dark .overview-health-card{background:linear-gradient(135deg,#0a281d,#184d3
 #entry #videoQueue,#shelf #videoQueue,#entry #nextVideo,#shelf #nextVideo{display:none}
 #entry #recordingDetail,#shelf #recordingDetail{max-width:760px}
 @media(max-width:750px){.store-heading{align-items:flex-start;flex-direction:column}.overview-simple-grid{grid-template-columns:1fr}.overview-simple .summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Checkout Help uses the same local video controls with a focused queue table. */
+#checkout .recording-library{display:none}
+#checkout #video{border:0;padding:0;margin:0 0 18px}
+#checkout #video>.page-heading{display:none}
+#checkout #video>.two{display:block}
+#checkout #video>.two>.panel:first-child{max-width:900px}
+#checkout #video>.two>.panel:nth-child(2),#checkout #video>.panel:last-child{display:none}
+#checkout #videoQueue,#checkout #nextVideo{display:none}
+#checkout .workflow-stats .summary-card{min-height:94px}
+#checkout .workflow-stats .summary-card strong{font-size:22px}
+#checkout .checkout-action{margin:16px 0}
+#checkout .checkout-action .buttons{align-items:center}
+#checkoutThreshold{width:64px;margin:0 5px}
+#checkout:has(#checkoutEditArea:focus) #videoCanvas{touch-action:none}
+#checkout table{font-size:12px}
+#checkout th,#checkout td{padding:12px 10px}
+#checkout td:last-child{white-space:normal;min-width:280px}
+#checkout tbody tr{cursor:pointer}

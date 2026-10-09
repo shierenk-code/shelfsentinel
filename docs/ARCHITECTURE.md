@@ -1,12 +1,12 @@
 # ShelfSentinel architecture and technology stack
 
-ShelfSentinel is a local, single-store prototype with three product views: Overview, Entry & Exit, and Shelf Maintenance. One browser tab analyzes one selected video at a time. The Node.js server serves the app and approved recordings, accepts narrowly defined events, and keeps temporary visit records in memory.
+ShelfSentinel is a local, single-store prototype with four product views: Overview, Entry & Exit, Shelf Maintenance, and Checkout Help. One browser tab analyzes one selected video at a time. The Node.js server serves the app and approved recordings, accepts narrowly defined events, and keeps temporary visit records in memory.
 
 ## Technology stack
 
 | Layer | Technology | Role |
 | --- | --- | --- |
-| Interface | HTML, CSS, browser JavaScript modules | Three views, video controls, tables, status, and zone calibration |
+| Interface | HTML, CSS, browser JavaScript modules | Four views, video controls, tables, status, and zone calibration |
 | Video | Browser `<video>`, Canvas 2D | Decode a selected MP4, display one annotated view, seek to evidence, and sample shelf pixels |
 | Person and object detection | TensorFlow.js and COCO-SSD lite MobileNet v2 | Detect generic people and objects in the browser; model bundle and weights are served locally |
 | Shelf analysis | `public/perception.mjs` | Compare a shelf crop with empty and stocked reference frames; report an estimate only when the comparison is usable |
@@ -21,8 +21,8 @@ ShelfSentinel is a local, single-store prototype with three product views: Overv
 
 1. **Source selection.** The browser chooses an included recording from `public/recordings.mjs` or a local MP4/WebM upload. The server exposes only allowlisted included filenames and supports byte-range requests for seeking. Local uploads use browser blob URLs.
 2. **Local frame analysis.** The selected video is decoded in the browser. Canvas displays its frame and zone outlines. The bundled model detects generic person and object boxes. No face recognition or SKU recognition runs.
-3. **Use-case rules.** On Entry & Exit, temporary box tracks are checked against configured entrance and exit zones. On Shelf Maintenance, the selected shelf area is sampled for visual changes. An occupancy percentage requires empty and stocked reference frames; the restocking sample has a preset calibration. Visual movement without calibration is labeled unverified.
-4. **Product display.** Entry & Exit shows observed crossings and active anonymous visits. Shelf Maintenance shows visual stock estimates, empty space, and time-linked activity. Overview summarizes the latest counts and last measured shelf condition.
+3. **Use-case rules.** On Entry & Exit, temporary box tracks are checked against configured entrance and exit zones. On Shelf Maintenance, the selected shelf area is sampled for visual changes. An occupancy percentage requires empty and stocked reference frames; the restocking sample has a preset calibration. Visual movement without calibration is labeled unverified. On Checkout Help, temporary person tracks with footpoints in a queue rectangle drive a count, threshold alert, and observed dwell.
+4. **Product display.** Entry & Exit shows observed crossings and active anonymous visits. Shelf Maintenance shows visual stock estimates, empty space, and time-linked activity. Checkout Help shows queue estimates, warnings, staff response marks, and a later observed count. Overview summarizes the latest counts and last measured shelf condition.
 5. **Local receiver.** The browser sends only schema-approved operational events to `/api/events`. It calls `/api/visits/open` and `/api/visits/close` for observed matched visits. The server rejects extra fields and bounds its in-memory event history.
 
 ## Privacy boundary and data lifetime
@@ -48,4 +48,4 @@ ShelfSentinel is a local, single-store prototype with three product views: Overv
 
 ## Demo scope
 
-The three public doorway samples are included in Git. The ten locally recorded shelf clips are excluded from Git; the app lists them only when present on the local server. The default restocking clip can show an empty-to-stocked shelf transition. Other camera angles require reference capture before a stock percentage is meaningful. All stock percentages describe visual similarity within a chosen shelf region, not product counts.
+The three public doorway samples and one public checkout sample are included in Git. The ten locally recorded shelf clips are excluded from Git; the app lists them only when present on the local server. The default restocking clip can show an empty-to-stocked shelf transition. Other camera angles require reference capture before a stock percentage is meaningful. All stock percentages describe visual similarity within a chosen shelf region, not product counts. Checkout counts are person-box estimates within a marked region; an observed decrease after staff action is not causal evidence.

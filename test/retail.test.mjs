@@ -10,7 +10,8 @@ test('recordings belong to exactly one visible use case',()=>{
   assert.equal(new Set(recordings.map(recording=>recording.id)).size,recordings.length);
   assert.deepEqual(recordings.filter(recording=>recording.purpose==='entry').map(recording=>recording.id),['entrance-exit','store-entrance','store-exit']);
   assert.equal(recordings.filter(recording=>recording.purpose==='shelf').length,10);
-  assert.ok(recordings.every(recording=>['entry','shelf'].includes(recording.purpose)));
+  assert.deepEqual(recordings.filter(recording=>recording.purpose==='checkout').map(recording=>recording.id),['checkout-counter']);
+  assert.ok(recordings.every(recording=>['entry','shelf','checkout'].includes(recording.purpose)));
   assert.ok(recordings.filter(recording=>recording.purpose==='entry').every(recording=>recording.visitSample));
 });
 

@@ -17,10 +17,13 @@ const shelfPage=document.createElement('section');shelfPage.id='shelf';shelfPage
 shelfPage.innerHTML='<div class="page-heading"><p class="eyebrow">SHELF OPERATIONS</p><h1>Shelf Maintenance</h1><p>Analyze a shelf video, see how much of the monitored area looks stocked, and review stock changes.</p></div><div class="panel recording-library"><h2>Shelf recordings</h2><div id="shelfClipList" class="recording-grid"></div></div><div class="panel shelf-settings"><h2>Shelf status</h2><div class="summary-grid"><article class="summary-card"><span>Visible shelf occupancy</span><strong id="shelfInventoryLevel">Not calibrated</strong><small>Compared with reference frames</small></article><article class="summary-card"><span>Stock status</span><strong id="shelfInventoryStatus">Awaiting analysis</strong><small id="shelfInventoryDetail">Run a calibrated shelf recording</small></article><article class="summary-card"><span>Low-stock limit</span><strong id="shelfLimitValue">25%</strong><small>Alert below this estimate</small></article><article class="summary-card"><span>Suggested action</span><strong id="shelfInventoryAction">None yet</strong><small>Based on observed changes</small></article></div><label>Low-stock limit (%) <input id="shelfLimitInput" type="number" min="1" max="90" value="25"></label><button id="saveShelfLimit">Save limit</button><p class="subtle">Visual occupancy is an estimate. These recordings do not identify individual products or count SKUs.</p></div><div class="panel"><h2>Shelf analysis</h2><div class="table-wrap"><table><thead><tr><th>Monitored area</th><th>Visible stock</th><th>Empty space</th><th>Status</th><th>Last observation</th></tr></thead><tbody id="shelfTableRows"><tr><td colspan="5">Analyze a calibrated shelf video to see stock estimates.</td></tr></tbody></table></div></div>';
 const shelfActivity=document.createElement('div');shelfActivity.className='panel shelf-activity';shelfActivity.innerHTML='<h2>Shelf activity</h2><p class="subtle">Visual changes appear while the video runs. Stock and restock claims require empty and stocked reference frames.</p><div class="table-wrap"><table><thead><tr><th>Video time</th><th>Observation</th><th>Visible stock</th><th>Evidence</th></tr></thead><tbody id="shelfActivityRows"><tr><td colspan="4">No shelf activity yet.</td></tr></tbody></table></div></div>';
 shelfPage.append(shelfActivity);
+const checkoutPage=document.createElement('section');checkoutPage.id='checkout';checkoutPage.className='page';
+checkoutPage.innerHTML='<div class="page-heading"><p class="eyebrow">CHECKOUT OPERATIONS</p><h1>Checkout Help</h1><p>Watch the checkout area, estimate how many shoppers are waiting, and log when staff opens another checkout.</p></div><div class="panel recording-library"><h2>Checkout recordings</h2><div id="checkoutClipList" class="recording-grid"></div></div><div class="summary-grid workflow-stats"><article class="summary-card"><span>People in queue area</span><strong id="checkoutCount">—</strong><small>Estimated from local person boxes</small></article><article class="summary-card"><span>Queue status</span><strong id="checkoutStatus">Awaiting analysis</strong><small id="checkoutStatusDetail">Start a checkout video</small></article><article class="summary-card"><span>Longest observed wait</span><strong id="checkoutWait">—</strong><small>Visible time in the queue area</small></article><article class="summary-card"><span>Staff responses logged</span><strong id="checkoutResponses">0</strong><small>For this video session</small></article></div><div class="panel checkout-action"><h2>Staff action</h2><p id="checkoutRecommendation">Analyze a checkout video to see if additional staff may be needed.</p><div class="buttons"><button id="checkoutMarkAction" class="primary">Mark another checkout opened</button><label>Warn at <input id="checkoutThreshold" type="number" min="1" max="20" value="2"> people</label><button id="checkoutSaveThreshold">Save</button><button id="checkoutEditArea">Adjust queue area</button></div><p id="checkoutAreaHint" class="subtle">The purple rectangle is the queue area. Adjust it for a different camera angle.</p><p class="subtle">The button records a staff response; it does not control checkout hardware. A later queue count is an observation, not proof of cause.</p></div><div class="panel"><h2>Checkout activity</h2><p class="subtle">Counts and responses belong to the selected video session. No customer identity is saved.</p><div class="table-wrap"><table><thead><tr><th>Video time</th><th>Activity</th><th>Queue estimate</th><th>Observation</th></tr></thead><tbody id="checkoutActivityRows"><tr><td colspan="4">Start analysis to see checkout activity.</td></tr></tbody></table></div></div>';
 const calibrationStatus=document.createElement('p');calibrationStatus.id='shelfCalibrationStatus';calibrationStatus.className='subtle';shelfPage.querySelector('.shelf-settings').append(calibrationStatus);
 const demoButton=$('overviewDemo');demoButton.hidden=false;demoButton.textContent='Run sample shelf scenario';shelfPage.querySelector('.page-heading').append(demoButton);
 dashboard.insertBefore(entryPage,$('visits'));
 dashboard.insertBefore(shelfPage,$('visits'));
+dashboard.insertBefore(checkoutPage,$('visits'));
 for(const id of ['video','visits','zones','events','operations','insights','privacy','recovery'])$(id).className='dashboard-section';
 entryPage.append($('video'),$('visits'));
 shelfPage.append($('zones'),$('events'),$('operations'),$('insights'));
@@ -38,11 +41,11 @@ const sampleCanvas=document.createElement('canvas');sampleCanvas.width=6;sampleC
 const sampleContext=sampleCanvas.getContext('2d',{willReadFrequently:true});
 const syntheticCanvas=document.createElement('canvas');syntheticCanvas.width=640;syntheticCanvas.height=360;
 const syntheticContext=syntheticCanvas.getContext('2d');
-const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,paused:false,model:null,modelStatus:'Not loaded',modelVersion:'COCO-SSD lite MobileNet v2',failure:null,frames:0,fps:0,latency:null,lastInference:0,lastFrameAt:0,lastSampleAt:0,detected:[],tracks:new Map(),nextTrackId:1,heat:Array(96).fill(0),events:[],insights:[],samples:[],buffer:[],lastOutbound:null,lastSuccessfulEvent:null,privacyViolations:0,zones:[],selectedZone:null,refs:new Map(),shelfPercents:new Map(),previousVectors:new Map(),shelfObservations:[],calibrationError:null,lastStockStates:new Map(),queueCounts:new Map(),footfallIds:new Set(),dwellSamples:[],visitsByTrack:new Map(),visitEvidence:new Map(),visitSnapshot:{activeCount:0,opened:0,exited:0,expired:0,active:[]},guideStep:0,syntheticPercent:100,syntheticTimers:[],generation:0};
-const availableRecordingIds=new Set(),lastQueueIndex={entry:-1,shelf:-1};
+const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,paused:false,model:null,modelStatus:'Not loaded',modelVersion:'COCO-SSD lite MobileNet v2',failure:null,frames:0,fps:0,latency:null,lastInference:0,lastFrameAt:0,lastSampleAt:0,detected:[],tracks:new Map(),nextTrackId:1,heat:Array(96).fill(0),events:[],insights:[],samples:[],buffer:[],lastOutbound:null,lastSuccessfulEvent:null,privacyViolations:0,zones:[],selectedZone:null,refs:new Map(),shelfPercents:new Map(),previousVectors:new Map(),shelfObservations:[],calibrationError:null,lastStockStates:new Map(),queueCounts:new Map(),checkoutObservations:[],checkoutActions:[],checkoutEditing:false,checkoutLastCount:null,footfallIds:new Set(),dwellSamples:[],visitsByTrack:new Map(),visitEvidence:new Map(),visitSnapshot:{activeCount:0,opened:0,exited:0,expired:0,active:[]},guideStep:0,syntheticPercent:100,syntheticTimers:[],generation:0};
+const availableRecordingIds=new Set(),lastQueueIndex={entry:-1,shelf:-1,checkout:-1};
 const visitLog=[];let visitNumber=0;const unmatchedExitIds=new Set();
 const storeSummary={shelfPercent:null,shelfSimulated:false};
-const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,shelfRoi:entry.shelfRoi||null,visitSample:!!entry.visitSample,exitOnly:!!entry.exitOnly,visitZones:entry.visitZones,detail:entry.detail});
+const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,shelfRoi:entry.shelfRoi||null,queueZone:entry.queueZone||null,visitSample:!!entry.visitSample,exitOnly:!!entry.exitOnly,visitZones:entry.visitZones,detail:entry.detail});
 const sourcePurpose=item=>item?.purpose||(item?.visitSample?'entry':'shelf');
 let zoneCounter=1,eventCounter=1,inferenceBusy=false,calibrationPromise=Promise.resolve();
 const videoReady=()=>state.source?.kind!=='synthetic'&&video.readyState>=2;
@@ -56,21 +59,22 @@ const status=(message,type='info')=>{const box=$('notice');clearTimeout(noticeTi
 
 function showPage(page){
   if(!$(page))return;
-  const tab=page==='overview'||page==='privacy'?'overview':page==='entry'||page==='visits'?'entry':page==='shelf'||['zones','events','operations','insights','recovery'].includes(page)?'shelf':sourcePurpose(state.source)==='entry'?'entry':'shelf';
+  const tab=page==='overview'||page==='privacy'?'overview':page==='entry'||page==='visits'?'entry':page==='checkout'?'checkout':page==='shelf'||['zones','events','operations','insights','recovery'].includes(page)?'shelf':sourcePurpose(state.source)==='entry'?'entry':'shelf';
   state.page=tab;
-  if(tab==='entry'||tab==='shelf'){renderRecordingOptions(tab);ensureSourceForTab(tab);}
+  if(tab==='entry'||tab==='shelf'||tab==='checkout'){renderRecordingOptions(tab);ensureSourceForTab(tab);}
   if(tab==='entry')entryPage.insertBefore($('video'),entryPage.querySelector('.workflow-stats'));
   if(tab==='shelf')shelfPage.insertBefore($('video'),shelfPage.querySelector('.shelf-settings'));
+  if(tab==='checkout')checkoutPage.insertBefore($('video'),checkoutPage.querySelector('.workflow-stats'));
   if(page==='zones')advancedZone.open=true;
   $('video').classList.toggle('entry-mode',tab==='entry');
-  $('video').querySelector('h1').textContent=tab==='entry'?'Doorway video analyzer':'Shelf video analyzer';
+  $('video').querySelector('h1').textContent=tab==='entry'?'Doorway video analyzer':tab==='checkout'?'Checkout video analyzer':'Shelf video analyzer';
   $('inspectPeople').closest('.panel').querySelector('h2').textContent=tab==='entry'?'Doorway detection':'Shelf detection';
-  $('videoUseCaseDescription').textContent=tab==='entry'?'Doorway recordings only. Select one to load it, then start local entry and exit analysis.':'Shelf recordings only. Select one to load it, then start local shelf analysis.';
+  $('videoUseCaseDescription').textContent=tab==='entry'?'Doorway recordings only. Select one to load it, then start local entry and exit analysis.':tab==='checkout'?'Checkout recordings only. Start local queue analysis.':'Shelf recordings only. Select one to load it, then start local shelf analysis.';
   for(const el of document.querySelectorAll('.page'))el.classList.toggle('active',el.id===tab);
   for(const el of document.querySelectorAll('.nav'))el.classList.toggle('active',el.dataset.target===tab);
-  $('pageTitle').textContent={overview:'Overview',entry:'Entry & Exit',shelf:'Shelf Maintenance'}[tab];
+  $('pageTitle').textContent={overview:'Overview',entry:'Entry & Exit',shelf:'Shelf Maintenance',checkout:'Checkout Help'}[tab];
   window.scrollTo(0,0);renderAll();
-  if(!['overview','entry','shelf'].includes(page)&&!$(page).closest('[hidden]'))$(page).scrollIntoView({behavior:'smooth',block:'start'});
+  if(!['overview','entry','shelf','checkout'].includes(page)&&!$(page).closest('[hidden]'))$(page).scrollIntoView({behavior:'smooth',block:'start'});
 }
 for(const button of document.querySelectorAll('.nav'))button.onclick=()=>showPage(button.dataset.target);
 for(const button of document.querySelectorAll('[data-go]'))button.onclick=()=>showPage(button.dataset.go);
@@ -107,8 +111,8 @@ function renderCanvas(){drawFrame(contexts.video,true);requestAnimationFrame(ren
 function clearTimers(){for(const timer of state.syntheticTimers)clearTimeout(timer);state.syntheticTimers=[];}
 function resetAnalysis(keepQueue=true,clearVisitStore=true){
   state.generation++;clearTimers();state.running=false;state.paused=false;video.pause();unmatchedExitIds.clear();
-  state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfObservations=[];state.calibrationError=null;state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.footfallIds.clear();state.dwellSamples=[];state.visitsByTrack.clear();if(clearVisitStore){state.visitEvidence.clear();state.visitSnapshot={activeCount:0,opened:0,exited:0,expired:0,active:[]};void clearVisits();}state.failure=null;state.guideStep=0;cooldown.clear();
-  if(!keepQueue){for(const item of state.queue)if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);state.queue=[];state.queueIndex=-1;lastQueueIndex.entry=-1;lastQueueIndex.shelf=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();}
+  state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfObservations=[];state.calibrationError=null;state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.checkoutObservations=[];state.checkoutActions=[];state.checkoutLastCount=null;state.checkoutEditing=false;state.footfallIds.clear();state.dwellSamples=[];state.visitsByTrack.clear();if(clearVisitStore){state.visitEvidence.clear();state.visitSnapshot={activeCount:0,opened:0,exited:0,expired:0,active:[]};void clearVisits();}state.failure=null;state.guideStep=0;cooldown.clear();
+  if(!keepQueue){for(const item of state.queue)if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);state.queue=[];state.queueIndex=-1;lastQueueIndex.entry=-1;lastQueueIndex.shelf=-1;lastQueueIndex.checkout=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();}
   renderAll();
 }
 
@@ -136,12 +140,12 @@ $('removeZone').onclick=()=>{if(!state.selectedZone)return;state.zones=state.zon
 $('zoneForm').onsubmit=event=>{event.preventDefault();const zone=zoneById(state.selectedZone);if(!zone)return;const name=$('zoneName').value.trim();if(!/^[A-Za-z0-9 _-]{1,32}$/.test(name)){status('Zone names can use letters, numbers, spaces, hyphens, and underscores.','warning');return;}zone.name=name;zone.type=$('zoneType').value;zone.detection=$('zoneDetection').value;zone.dwell=clamp(Number($('zoneDwell').value),1,600);zone.queue=clamp(Number($('zoneQueue').value),1,30);zone.shelf=clamp(Number($('zoneShelf').value),1,90);state.refs.delete(zone.id);renderZones();renderAll();status('Zone rules saved. Recalibrate a changed shelf zone.');};
 $('saveShelfLimit').onclick=()=>{const zone=state.zones.find(item=>item.type==='shelf');if(!zone)return status('Load a shelf recording first.','warning');const limit=Number($('shelfLimitInput').value);if(!Number.isInteger(limit)||limit<1||limit>90)return status('Choose a stock limit between 1% and 90%.','warning');zone.shelf=limit;renderZones();renderAll();status(`Low-stock limit saved at ${limit}%.`);};
 let drawStart=null;
-function startZoneDrag(event){if(event.currentTarget===canvases.video&&(!advancedZone.open||state.page!=='shelf'))return;const rect=event.currentTarget.getBoundingClientRect();drawStart={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};event.currentTarget.setPointerCapture(event.pointerId);}
-function endZoneDrag(event){if(!drawStart)return;const rect=event.currentTarget.getBoundingClientRect(),end={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};const x=Math.min(drawStart.x,end.x),y=Math.min(drawStart.y,end.y),w=Math.abs(end.x-drawStart.x),h=Math.abs(end.y-drawStart.y);drawStart=null;if(w<.04||h<.04)return status('Draw a larger rectangle.','warning');let zone=zoneById(state.selectedZone);if(!zone){zone=zoneDefaults();state.zones.push(zone);state.selectedZone=zone.id;}Object.assign(zone,{x,y,w,h});state.refs.delete(zone.id);renderZones();renderAll();status(`${zone.name} area updated. Capture new shelf references if needed.`);}
+function startZoneDrag(event){if(event.currentTarget===canvases.video&&!((advancedZone.open&&state.page==='shelf')||(state.page==='checkout'&&state.checkoutEditing)))return;const rect=event.currentTarget.getBoundingClientRect();drawStart={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};event.currentTarget.setPointerCapture(event.pointerId);}
+function endZoneDrag(event){if(!drawStart)return;const rect=event.currentTarget.getBoundingClientRect(),end={x:clamp((event.clientX-rect.left)/rect.width,0,1),y:clamp((event.clientY-rect.top)/rect.height,0,1)};const x=Math.min(drawStart.x,end.x),y=Math.min(drawStart.y,end.y),w=Math.abs(end.x-drawStart.x),h=Math.abs(end.y-drawStart.y);drawStart=null;if(w<.04||h<.04)return status('Draw a larger rectangle.','warning');let zone=zoneById(state.selectedZone);if(!zone){zone=zoneDefaults();state.zones.push(zone);state.selectedZone=zone.id;}Object.assign(zone,{x,y,w,h});state.refs.delete(zone.id);if(state.page==='checkout'){state.checkoutEditing=false;$('checkoutEditArea').textContent='Adjust queue area';$('checkoutAreaHint').textContent='Queue area updated. Restart analysis for counts from the new area.';state.tracks.clear();state.queueCounts.clear();state.checkoutLastCount=null;}renderZones();renderAll();status(`${zone.name} area updated.`);}
 for(const canvas of [canvases.zone,canvases.video]){canvas.onpointerdown=startZoneDrag;canvas.onpointerup=endZoneDrag;}
 
 function renderQueue(){
-  const purpose=state.page==='entry'?'entry':'shelf',box=$('videoQueue');
+  const purpose=['entry','shelf','checkout'].includes(state.page)?state.page:'shelf',box=$('videoQueue');
   const items=state.queue.map((item,index)=>({item,index})).filter(({item})=>sourcePurpose(item)===purpose);
   if(!items.length){box.textContent=purpose==='entry'?'No doorway recordings queued. Choose a doorway sample above.':'No shelf recordings queued. Choose a shelf clip above.';return;}
   box.replaceChildren(...items.map(({item,index})=>{const button=document.createElement('button');button.textContent=`${item.name} · ${item.status}`;button.className=index===state.queueIndex?'selected':'';button.onclick=()=>loadSource(index);return button;}));
@@ -151,27 +155,27 @@ function activateRecording(entry){const existing=state.queue.findIndex(item=>ite
 function renderRecordingOptions(purpose){
   const select=$('includedSelect'),current=state.source?.recordingId;
   select.replaceChildren();
-  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=purpose==='entry'?'Choose doorway video':'Choose shelf video';select.append(placeholder);
+  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=purpose==='entry'?'Choose doorway video':purpose==='checkout'?'Choose checkout video':'Choose shelf video';select.append(placeholder);
   for(const entry of recordings.filter(item=>item.purpose===purpose&&availableRecordingIds.has(item.id))){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.title;select.append(option);}
   select.value=current&&recordings.some(item=>item.id===current&&item.purpose===purpose)?current:'';
-  $('includedLabel').textContent=purpose==='entry'?'Doorway recording':'Shelf recording';
+  $('includedLabel').textContent=purpose==='entry'?'Doorway recording':purpose==='checkout'?'Checkout recording':'Shelf recording';
 }
 function ensureSourceForTab(purpose){
   if(sourcePurpose(state.source)===purpose&&state.source)return;
   const previous=lastQueueIndex[purpose];
   if(previous>=0&&state.queue[previous]){loadSource(previous);return;}
-  const preferred=purpose==='entry'?'store-entrance':'clip-03';
+  const preferred=purpose==='entry'?'store-entrance':purpose==='checkout'?'checkout-counter':'clip-03';
   const entry=recordings.find(item=>item.id===preferred&&availableRecordingIds.has(item.id))||recordings.find(item=>item.purpose===purpose&&availableRecordingIds.has(item.id));
   if(entry)activateRecording(entry);
   else{state.running=false;video.pause();video.removeAttribute('src');video.load();state.source=null;$('sessionName').textContent='No video selected';renderAll();}
 }
 function loadSelectedRecording(){const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry||!availableRecordingIds.has(id))return status('Choose an available recording for this page.','warning');if(entry.purpose!==state.page)return status('This recording belongs to the other use case.','warning');activateRecording(entry);status(`${entry.title} loaded. Press Start Analysis.`);}
-$('videoFiles').onchange=()=>{for(const file of $('videoFiles').files){if(!/\.(mp4|webm)$/i.test(file.name))continue;addQueueItem({name:file.name,url:URL.createObjectURL(file),kind:'local',purpose:state.page==='entry'?'entry':'shelf'});}$('videoFiles').value='';};
+$('videoFiles').onchange=()=>{for(const file of $('videoFiles').files){if(!/\.(mp4|webm)$/i.test(file.name))continue;addQueueItem({name:file.name,url:URL.createObjectURL(file),kind:'local',purpose:['entry','shelf','checkout'].includes(state.page)?state.page:'shelf'});}$('videoFiles').value='';};
 $('includedSelect').onchange=loadSelectedRecording;
 $('addIncluded').textContent='Reload selected video';$('addIncluded').onclick=loadSelectedRecording;
 $('loadEntranceSample').onclick=()=>{const entry=recordings.find(item=>item.id==='store-entrance');if(!availableRecordingIds.has(entry.id))return status('The grocery entrance sample is unavailable on this server.','warning');activateRecording(entry);showPage('entry');status('Grocery doorway video loaded. Press Start Analysis. Adjust the zones before relying on counts.');};
 function renderRecordingCards(purpose){
-  const container=$(purpose==='entry'?'entryClipList':'shelfClipList');
+  const container=$(purpose==='entry'?'entryClipList':purpose==='checkout'?'checkoutClipList':'shelfClipList');
   const entries=recordings.filter(item=>item.purpose===purpose&&availableRecordingIds.has(item.id));
   if(!entries.length){container.textContent=`No ${purpose==='entry'?'doorway':'shelf'} recordings are available on this server.`;return;}
   container.replaceChildren(...entries.map(entry=>{
@@ -187,9 +191,9 @@ async function loadIncludedLibrary(){
   try{
     const response=await fetch('/api/recordings');if(!response.ok)throw Error('Recording library unavailable');
     const data=await response.json();for(const id of data.available)availableRecordingIds.add(id);
-    renderRecordingCards('entry');renderRecordingCards('shelf');
-    renderRecordingOptions(state.page==='entry'?'entry':'shelf');
-    if(state.page==='entry'||state.page==='shelf')ensureSourceForTab(state.page);
+    renderRecordingCards('entry');renderRecordingCards('shelf');renderRecordingCards('checkout');
+    renderRecordingOptions(['entry','shelf','checkout'].includes(state.page)?state.page:'shelf');
+    if(['entry','shelf','checkout'].includes(state.page))ensureSourceForTab(state.page);
   }catch{status('Included recording library unavailable. Upload a local file or run the synthetic demo.','warning');}
 }
 function loadSource(index){
@@ -197,6 +201,7 @@ function loadSource(index){
   const next=state.queue[index],purpose=sourcePurpose(next);
   resetAnalysis(true,false);state.refs.clear();state.queueIndex=index;state.source=next;state.source.status='Loaded';lastQueueIndex[purpose]=index;
   if(purpose==='entry'){state.zones=(next.exitOnly?['exit']:['entrance','exit']).map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=next.visitZones?.[type]||(type==='entrance'?[.2,.35,.25,.6]:[.56,.35,.25,.6]);return zone;});state.selectedZone=state.zones[0].id;}
+  else if(purpose==='checkout'){const zone=zoneDefaults('queue');[zone.x,zone.y,zone.w,zone.h]=next.queueZone||[.25,.12,.7,.86];zone.queue=2;zone.dwell=6;state.zones=[zone];state.selectedZone=zone.id;$('checkoutThreshold').value=String(zone.queue);}
   else {const zone=zoneDefaults('shelf');if(next.shelfRoi)[zone.x,zone.y,zone.w,zone.h]=next.shelfRoi.map(value=>value/100);state.zones=[zone];state.selectedZone=zone.id;}
   renderZones();video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;$('recordingDetail').textContent=state.source.detail||'Local video selected in this browser.';$('visitsSourceNote').textContent=purpose==='entry'?'Doorway zones are estimates. The clip may show entrances without the same person leaving. Exits count only when one continuous temporary track crosses the Exit zone.':'Load a doorway recording on Entry & Exit to count visits.';renderRecordingOptions(purpose);for(const card of document.querySelectorAll('.recording-card'))card.classList.toggle('selected',card.dataset.recordingId===next.recordingId);status('Video loaded. Configure zones, then start local analysis.');renderAll();
 }
@@ -213,18 +218,22 @@ video.onerror=()=>{$('videoError').textContent='This video could not be decoded.
 video.onended=()=>{state.running=false;state.paused=false;if(state.source)state.source.status='Complete';renderAll();};
 $('captureEmpty').onclick=()=>captureReference('empty');$('captureStocked').onclick=()=>captureReference('full');
 function captureReference(kind){const zone=zoneById(state.selectedZone);if(!zone||zone.type!=='shelf')return status('Select a shelf zone first.','warning');if(!videoReady()&&state.source?.kind!=='synthetic')return status('Load a video frame first.','warning');state.running=false;video.pause();const refs=state.refs.get(zone.id)||{};refs[kind]=sampleShelf(zone);state.refs.set(zone.id,refs);$('referenceStatus').textContent=`${zone.name}: empty ${refs.empty?'captured':'needed'} · stocked ${refs.full?'captured':'needed'}.`;status(`${kind==='full'?'Stocked':'Empty'} reference captured locally.`);renderAll();}
-$('nextVideo').onclick=()=>{const purpose=state.page==='entry'?'entry':'shelf',indexes=state.queue.map((item,index)=>sourcePurpose(item)===purpose?index:-1).filter(index=>index>=0);if(!indexes.length)return status('No next video for this page.','warning');const current=indexes.indexOf(state.queueIndex);loadSource(indexes[(current+1)%indexes.length]);};
+$('nextVideo').onclick=()=>{const purpose=['entry','shelf','checkout'].includes(state.page)?state.page:'shelf',indexes=state.queue.map((item,index)=>sourcePurpose(item)===purpose?index:-1).filter(index=>index>=0);if(!indexes.length)return status('No next video for this page.','warning');const current=indexes.indexOf(state.queueIndex);loadSource(indexes[(current+1)%indexes.length]);};
 $('pauseAnalysis').onclick=()=>{state.running=false;state.paused=true;video.pause();clearTimers();if(state.source)state.source.status='Paused';renderAll();};
 $('stopAnalysis').onclick=()=>{state.running=false;state.paused=false;video.pause();clearTimers();if(state.source)state.source.status='Stopped';renderAll();};
 $('resetAnalysis').onclick=()=>{
-  const purpose=state.page==='entry'?'entry':'shelf',other=purpose==='entry'?'shelf':'entry',otherItem=state.queue[lastQueueIndex[other]];
+  const purpose=['entry','shelf','checkout'].includes(state.page)?state.page:'shelf';
+  const retained=Object.fromEntries(Object.keys(lastQueueIndex).filter(key=>key!==purpose).map(key=>[key,state.queue[lastQueueIndex[key]]]));
   resetAnalysis(true,purpose==='entry');
   for(const item of state.queue.filter(item=>sourcePurpose(item)===purpose))if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);
   state.queue=state.queue.filter(item=>sourcePurpose(item)!==purpose);
-  lastQueueIndex[purpose]=-1;lastQueueIndex[other]=otherItem?state.queue.indexOf(otherItem):-1;
+  lastQueueIndex[purpose]=-1;for(const [key,item] of Object.entries(retained))lastQueueIndex[key]=item?state.queue.indexOf(item):-1;
   state.queueIndex=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();
   $('sessionName').textContent='No video selected';renderRecordingOptions(purpose);for(const card of document.querySelectorAll('.recording-card'))card.classList.remove('selected');renderAll();status('This use case was reset. The other recording list remains available.');
 };
+$('checkoutSaveThreshold').onclick=()=>{const zone=state.zones.find(item=>item.type==='queue');if(!zone)return status('Load a checkout video first.','warning');const threshold=Number($('checkoutThreshold').value);if(!Number.isInteger(threshold)||threshold<1||threshold>20)return status('Choose a warning level from 1 to 20 people.','warning');zone.queue=threshold;renderAll();status(`Checkout warning set to ${threshold} people.`);};
+$('checkoutEditArea').onclick=()=>{if(state.page!=='checkout'||!state.zones.some(item=>item.type==='queue'))return status('Load a checkout video first.','warning');state.checkoutEditing=!state.checkoutEditing;$('checkoutEditArea').textContent=state.checkoutEditing?'Cancel area adjustment':'Adjust queue area';$('checkoutAreaHint').textContent=state.checkoutEditing?'Drag a rectangle on the video over the waiting area.':'The purple rectangle is the queue area. Adjust it for a different camera angle.';};
+$('checkoutMarkAction').onclick=()=>{if(state.page!=='checkout'||!state.source||!state.model||!state.frames)return status('Start checkout analysis and wait for a queue estimate.','warning');const count=[...state.queueCounts.values()].reduce((a,b)=>a+b,0);state.checkoutActions.unshift({time:currentMediaTime(),before:count,after:null});state.checkoutObservations.unshift({time:currentMediaTime(),label:'Staff marked another checkout open',count,detail:'Waiting for a later observed queue count.'});renderAll();status('Staff response logged. Keep the video playing to compare a later count.');};
 
 const eventTitles={PERSON_ENTERED:'Entrance crossing',PERSON_EXITED:'Exit crossing',DWELL_THRESHOLD:'Dwell threshold reached',PRODUCT_INTERACTION:'Possible shelf interaction',PRODUCT_REMOVED:'Possible product removal',PRODUCT_RETURNED:'Possible product return',SHELF_LOW:'Shelf running low',SHELF_EMPTY:'Shelf empty',RESTOCK_DETECTED:'Restock inferred',QUEUE_BUILDUP:'Queue buildup',LONG_WAIT:'Long observed wait',CHECKOUT_CONGESTION:'Checkout congestion'};
 const actionFor=type=>({SHELF_LOW:'Check shelf stock and prepare replenishment.',SHELF_EMPTY:'Replenish this shelf now.',RESTOCK_DETECTED:'Confirm the shelf is ready for shoppers.',PRODUCT_REMOVED:'Review shelf stock after the interaction.',QUEUE_BUILDUP:'Open another checkout if staff are available.',LONG_WAIT:'Send support to checkout.',CHECKOUT_CONGESTION:'Review checkout staffing.'})[type]||null;
@@ -331,6 +340,13 @@ function analyzePeople(detections){
     }else if(zone.type==='promotion'&&currentMediaTime()-track.zoneEnteredAt>=zone.dwell&&!track.lastDwellEventAt){track.lastDwellEventAt=currentMediaTime();state.dwellSamples.push(currentMediaTime()-track.zoneEnteredAt);addEvent('DWELL_THRESHOLD',zone,track.score,Math.round(currentMediaTime()-track.zoneEnteredAt),'Person box stayed in this zone.','Configured dwell threshold reached.');}
   }
   for(const zone of state.zones.filter(z=>z.type==='queue')){const count=state.queueCounts.get(zone.id)||0;if(count>=zone.queue)addEvent('QUEUE_BUILDUP',zone,.8,count,`${count} person boxes have footpoints in the checkout zone.`,`Queue count ≥ configured ${zone.queue}.`);}
+  if(sourcePurpose(state.source)==='checkout')observeCheckout();
+}
+function observeCheckout(){
+  const count=[...state.queueCounts.values()].reduce((a,b)=>a+b,0),time=currentMediaTime();
+  if(state.checkoutLastCount!==count){state.checkoutObservations.unshift({time,label:state.checkoutLastCount===null?'Queue monitoring started':'Queue estimate changed',count,detail:'Observed person boxes with footpoints in the configured queue area.'});state.checkoutLastCount=count;}
+  for(const action of state.checkoutActions){if(action.after!==null||time-action.time<3)continue;action.after=count;state.checkoutObservations.unshift({time,label:'After staff response',count,detail:`Observed ${count} in the queue area; ${action.before} when staff responded. This does not establish cause.`});}
+  if(state.checkoutObservations.length>30)state.checkoutObservations.length=30;
 }
 function analyzeShelves(){
   for(const zone of state.zones.filter(z=>z.type==='shelf')){
@@ -407,6 +423,17 @@ function renderCharts(){const chart=$('trafficChart'),ctx=chart.getContext('2d')
 }
 function renderAll(){
   const simulated=state.source?.kind==='synthetic',people=state.detected.filter(d=>d.class==='person'),objects=state.detected.filter(d=>d.class!=='person'),queue=[...state.queueCounts.values()].reduce((a,b)=>a+b,0),shelf=[...state.shelfPercents.values()][0],duration=Number.isFinite(video.duration)?video.duration:0,progress=simulated?(state.running?Math.min(99,currentMediaTime()/5*100):state.source?.status==='Complete'?100:0):duration?video.currentTime/duration*100:0;
+  const checkoutActive=sourcePurpose(state.source)==='checkout',queueZone=state.zones.find(zone=>zone.type==='queue'),queueMeasured=checkoutActive&&state.model&&state.frames>0;
+  $('checkoutCount').textContent=queueMeasured?String(queue):'—';
+  $('checkoutStatus').textContent=!queueMeasured?'Awaiting analysis':queue>=queueZone.queue?'Needs support':'Under limit';
+  $('checkoutStatusDetail').textContent=queueMeasured?`Warning at ${queueZone.queue} people`:'Start a checkout video';
+  const queueWait=checkoutActive&&queueZone?Math.max(0,...[...state.tracks.values()].filter(track=>track.zoneId===queueZone.id).map(track=>currentMediaTime()-track.zoneEnteredAt)):0;
+  $('checkoutWait').textContent=queueMeasured?`${Math.round(queueWait)} s`:'—';
+  $('checkoutResponses').textContent=String(checkoutActive?state.checkoutActions.length:0);
+  $('checkoutRecommendation').textContent=!queueMeasured?'Analyze a checkout video to see if additional staff may be needed.':queue>=queueZone.queue?'Queue is at or above the warning level. Open another checkout if staff are available.':'Queue is below the warning level. Keep monitoring.';
+  $('checkoutMarkAction').disabled=!queueMeasured;
+  const checkoutRows=$('checkoutActivityRows');checkoutRows.replaceChildren();
+  if(!checkoutActive||!state.checkoutObservations.length){const row=document.createElement('tr'),cell=node('td','Start analysis to see checkout activity.');cell.colSpan=4;row.append(cell);checkoutRows.append(row);}else for(const item of state.checkoutObservations.slice(0,20)){const row=document.createElement('tr');for(const value of [formatTime(item.time),item.label,String(item.count),item.detail])row.append(node('td',value));row.onclick=()=>showVideoMoment(item.time);checkoutRows.append(row);}
   $('storeDate').textContent=new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   $('briefInside').textContent=String(state.visitSnapshot.activeCount);$('briefEntries').textContent=String(state.visitSnapshot.opened);$('briefExits').textContent=String(state.visitSnapshot.exited);$('briefRecords').textContent=String(state.visitSnapshot.activeCount);
   $('briefActivity').textContent=state.visitSnapshot.opened?`${state.visitSnapshot.opened} observed entrance crossing${state.visitSnapshot.opened===1?'':'s'} and ${state.visitSnapshot.exited} matched exit${state.visitSnapshot.exited===1?'':'s'} in this server session.`:'No doorway crossings recorded in this server session.';
