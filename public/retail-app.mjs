@@ -287,15 +287,17 @@ async function closeVisit(track,zone){
 function observeUnmatchedExit(track){
   if(unmatchedExitIds.has(track.id))return;
   unmatchedExitIds.add(track.id);
-  visitLog.unshift({number:++visitNumber,enteredAt:null,exitedAt:new Date(),entryTime:currentMediaTime(),sourceId:state.source?.id,status:'Exit seen · no matching entry'});
-  if(visitLog.length>100)visitLog.length=100;
-  renderVisits();
+  const zone=zoneById(track.zoneId);
+  const active=state.visitSnapshot.active?.[0];
+  if(active){
+    void (async()=>{try{await visitRequest('/api/visits/close',{type:'visit_close',visitId:active.visitId});const row=visitLog.find(item=>item.visitId===active.visitId);if(row){row.exitedAt=new Date();row.status='Exited · demo exit clip';delete row.visitId;}addEvent('PERSON_EXITED',zone,track.score,1,'The public exit sample crossed the exit zone. The oldest active anonymous visit was closed for this demo flow.','Demo bridge: separate clips cannot prove identity; the UI labels this as a demo exit.');await fetchVisits();renderVisits();}catch{status('Exit was detected, but the local visit record could not be deleted.','warning');}})();
+  }else{visitLog.unshift({number:++visitNumber,enteredAt:null,exitedAt:new Date(),entryTime:currentMediaTime(),sourceId:state.source?.id,status:'Exit seen · no active entry'});if(visitLog.length>100)visitLog.length=100;renderVisits();}
 }
 function renderVisits(){
   const visits=state.visitSnapshot;
   $('entryInside').textContent=String(visits.activeCount);$('entryEntered').textContent=String(visits.opened);$('entryExited').textContent=String(visits.exited);$('entryTimedOut').textContent=String(visits.expired);
   const activeIds=new Set(visits.active.map(item=>item.visitId));for(const item of visitLog)if(item.status==='Inside'&&!activeIds.has(item.visitId)){item.status='Timed out or reset';delete item.visitId;}
-  $('exitOnlyCount').textContent=state.source?.exitOnly?`${visitLog.filter(item=>item.sourceId===state.source?.id&&item.status.startsWith('Exit seen')).length} exit-only observations in this video. These do not reduce the inside count because no matching entry was seen.`:'';
+  $('exitOnlyCount').textContent=state.source?.exitOnly?'This public exit sample uses a labelled demo bridge: it closes the oldest active anonymous visit. Separate clips cannot prove that the person is the same.':'';
   const table=$('entryTableRows');table.replaceChildren();if(!visitLog.length){const row=document.createElement('tr'),cell=node('td','No observed crossings yet. Start a doorway video.');cell.colSpan=5;row.append(cell);table.append(row);}else for(const item of visitLog.slice(0,30)){const row=document.createElement('tr');for(const value of [`${item.enteredAt?'Visit':'Exit observation'} ${item.number}`,item.enteredAt?.toLocaleTimeString()||'—',item.exitedAt?.toLocaleTimeString()||'—',item.status])row.append(node('td',value));const cell=document.createElement('td');if(item.sourceId===state.source?.id){const button=node('button',`Video ${formatTime(item.entryTime)}`);button.onclick=()=>showVideoMoment(item.entryTime);cell.append(button);}else cell.textContent='Previous video';row.append(cell);table.append(row);}
   $('visitsActive').textContent=String(visits.activeCount);
   $('visitsOpened').textContent=String(visits.opened);
