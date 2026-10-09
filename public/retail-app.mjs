@@ -27,6 +27,7 @@ dashboard.insertBefore(entryPage,$('visits'));
 dashboard.insertBefore(shelfPage,$('visits'));
 dashboard.insertBefore(checkoutPage,$('visits'));
 dashboard.insertBefore(alertsPage,$('visits'));
+alertsPage.querySelector('.page-heading').insertAdjacentHTML('beforeend','<div class="buttons"><button id="alertLoadTraffic" class="primary">Load inside traffic video</button></div>');
 for(const id of ['video','visits','zones','events','operations','insights','privacy','recovery'])$(id).className='dashboard-section';
 entryPage.append($('video'),$('visits'));
 shelfPage.append($('zones'),$('events'),$('operations'),$('insights'));
@@ -68,6 +69,7 @@ function showPage(page){
   if(tab==='entry')entryPage.insertBefore($('video'),entryPage.querySelector('.workflow-stats'));
   if(tab==='shelf')shelfPage.insertBefore($('video'),shelfPage.querySelector('.shelf-settings'));
   if(tab==='checkout')checkoutPage.insertBefore($('video'),checkoutPage.querySelector('.workflow-stats'));
+  if(tab==='alerts')alertsPage.insertBefore($('video'),alertsPage.querySelector('.workflow-stats'));
   if(tab==='overview')$('overviewCinemaMount').append($('video'));
   if(page==='zones')advancedZone.open=true;
   $('video').classList.toggle('entry-mode',tab==='entry');
@@ -244,6 +246,7 @@ $('resetAnalysis').onclick=()=>{
 $('checkoutSaveThreshold').onclick=()=>{const zone=state.zones.find(item=>item.type==='queue');if(!zone)return status('Load a checkout video first.','warning');const threshold=Number($('checkoutThreshold').value);if(!Number.isInteger(threshold)||threshold<1||threshold>20)return status('Choose a warning level from 1 to 20 people.','warning');zone.queue=threshold;renderAll();status(`Checkout warning set to ${threshold} people.`);};
 $('checkoutEditArea').onclick=()=>{if(state.page!=='checkout'||!state.zones.some(item=>item.type==='queue'))return status('Load a checkout video first.','warning');state.checkoutEditing=!state.checkoutEditing;$('checkoutEditArea').textContent=state.checkoutEditing?'Cancel area adjustment':'Adjust queue area';$('checkoutAreaHint').textContent=state.checkoutEditing?'Drag a rectangle on the video over the waiting area.':'The purple rectangle is the queue area. Adjust it for a different camera angle.';};
 $('checkoutMarkAction').onclick=()=>{if(state.page!=='checkout'||!state.source||!state.model||!state.frames)return status('Start checkout analysis and wait for a queue estimate.','warning');const count=[...state.queueCounts.values()].reduce((a,b)=>a+b,0);state.checkoutActions.unshift({time:currentMediaTime(),before:count,after:null});state.checkoutObservations.unshift({time:currentMediaTime(),label:'Staff marked another checkout open',count,detail:'Waiting for a later observed queue count.'});renderAll();status('Staff response logged. Keep the video playing to compare a later count.');};
+$('alertLoadTraffic').onclick=()=>{const entry=recordings.find(item=>item.id==='inside-traffic');if(!entry||!availableRecordingIds.has(entry.id))return status('The inside traffic sample is unavailable.','warning');activateRecording(entry);showPage('alerts');status('Inside traffic video loaded. Press Start Analysis to estimate the crowd.');};
 $('alertStaffButton').onclick=()=>{state.alertStaff=true;state.alertLog.unshift({time:currentMediaTime(),label:'Extra staff requested',detail:'Floor team should open or assign another checkout.'});renderAll();status('Extra staff request recorded locally.');};
 $('alertPublicButton').onclick=()=>{state.alertPublic=true;state.alertLog.unshift({time:currentMediaTime(),label:'Public floor alert raised',detail:'Local floor notification is active for this demo session.'});renderAll();status('Public floor alert marked active locally.');};
 $('alertClearButton').onclick=()=>{state.alertStaff=false;state.alertPublic=false;state.alertLog.unshift({time:currentMediaTime(),label:'Alerts cleared',detail:'No active floor notification.'});renderAll();};
