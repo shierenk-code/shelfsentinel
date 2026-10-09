@@ -2,6 +2,7 @@
 export const recordings = [
   {id:'entrance-exit',purpose:'entry',file:'entrance-exit-pexels-4077491.mp4',title:'Revolving building door',detail:'People move through a revolving entrance · public sample · 20 seconds',visitSample:true,visitZones:{entrance:[.24,.42,.20,.55],exit:[.53,.42,.20,.55]}},
   {id:'store-entrance',purpose:'entry',file:'store-entrance-pexels-6641527.mp4',title:'Grocery store sliding doors',detail:'Exterior view of shoppers at grocery sliding doors · public sample · 20 seconds',visitSample:true,visitZones:{entrance:[.27,.4,.17,.55],exit:[.44,.4,.16,.55]}},
+  {id:'store-exit',purpose:'entry',file:'store-exit-pexels-6565790.mp4',title:'Shoppers leaving a clothing store',detail:'Two shoppers visibly leave through the storefront · public exit-only sample · 9 seconds',visitSample:true,exitOnly:true,visitZones:{exit:[.05,.8,.9,.19]}},
   {id:'clip-03',purpose:'shelf',file:'clip-03.mp4',title:'Restocking the middle shelf',detail:'A shopper refills the middle shelf · 22 seconds · calibrated demo',calibration:{roi:[42,40,32,32],emptyAt:0.6,fullAt:20}},
   {id:'clip-02',purpose:'shelf',file:'clip-02.mp4',title:'Removing products from middle shelf',detail:'A shopper removes several middle-shelf products · 11 seconds'},
   {id:'clip-01',purpose:'shelf',file:'clip-01.mp4',title:'First middle-shelf pickup',detail:'A shopper reaches for a product on the middle shelf · 21 seconds'},

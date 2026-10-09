@@ -11,6 +11,8 @@ overviewBrief.innerHTML='<div class="store-heading"><div><p class="eyebrow">STOR
 $('overview').prepend(overviewBrief);
 const entryPage=document.createElement('section');entryPage.id='entry';entryPage.className='page';
 entryPage.innerHTML='<div class="page-heading"><p class="eyebrow">STORE PRESENCE</p><h1>Entry &amp; Exit</h1><p>Choose a doorway video and start analysis. The table records observed entries and matched exits.</p></div><div class="panel recording-library"><h2>Doorway recordings</h2><div id="entryClipList" class="recording-grid"></div></div><div class="summary-grid workflow-stats"><article class="summary-card"><span>Inside now</span><strong id="entryInside">0</strong></article><article class="summary-card"><span>Entries</span><strong id="entryEntered">0</strong></article><article class="summary-card"><span>Exits</span><strong id="entryExited">0</strong></article><article class="summary-card"><span>Timed out</span><strong id="entryTimedOut">0</strong></article></div><div class="panel"><h2>Entry &amp; exit records</h2><p class="subtle">Only observed crossings appear. A matched exit removes the active server record; this table shows an anonymous session log.</p><div class="table-wrap"><table><thead><tr><th>Visit</th><th>Entry</th><th>Exit</th><th>Status</th><th>Evidence</th></tr></thead><tbody id="entryTableRows"><tr><td colspan="5">Start a doorway video to see observed entries.</td></tr></tbody></table></div></div>';
+entryPage.querySelector('#entryExited').parentElement.querySelector('span').textContent='Matched exits';
+const exitOnlyNote=document.createElement('p');exitOnlyNote.id='exitOnlyCount';exitOnlyNote.className='subtle';entryPage.querySelector('#entryTableRows').closest('.table-wrap').before(exitOnlyNote);
 const shelfPage=document.createElement('section');shelfPage.id='shelf';shelfPage.className='page';
 shelfPage.innerHTML='<div class="page-heading"><p class="eyebrow">SHELF OPERATIONS</p><h1>Shelf Maintenance</h1><p>Analyze a shelf video, see how much of the monitored area looks stocked, and review stock changes.</p></div><div class="panel recording-library"><h2>Shelf recordings</h2><div id="shelfClipList" class="recording-grid"></div></div><div class="panel shelf-settings"><h2>Shelf status</h2><div class="summary-grid"><article class="summary-card"><span>Visible shelf occupancy</span><strong id="shelfInventoryLevel">Not calibrated</strong><small>Compared with reference frames</small></article><article class="summary-card"><span>Stock status</span><strong id="shelfInventoryStatus">Awaiting analysis</strong><small id="shelfInventoryDetail">Run a calibrated shelf recording</small></article><article class="summary-card"><span>Low-stock limit</span><strong id="shelfLimitValue">25%</strong><small>Alert below this estimate</small></article><article class="summary-card"><span>Suggested action</span><strong id="shelfInventoryAction">None yet</strong><small>Based on observed changes</small></article></div><label>Low-stock limit (%) <input id="shelfLimitInput" type="number" min="1" max="90" value="25"></label><button id="saveShelfLimit">Save limit</button><p class="subtle">Visual occupancy is an estimate. These recordings do not identify individual products or count SKUs.</p></div><div class="panel"><h2>Shelf analysis</h2><div class="table-wrap"><table><thead><tr><th>Monitored area</th><th>Visible stock</th><th>Empty space</th><th>Status</th><th>Last observation</th></tr></thead><tbody id="shelfTableRows"><tr><td colspan="5">Analyze a calibrated shelf video to see stock estimates.</td></tr></tbody></table></div></div>';
 const demoButton=$('overviewDemo');demoButton.hidden=false;demoButton.textContent='Run sample shelf scenario';shelfPage.querySelector('.page-heading').append(demoButton);
@@ -33,9 +35,9 @@ const syntheticCanvas=document.createElement('canvas');syntheticCanvas.width=640
 const syntheticContext=syntheticCanvas.getContext('2d');
 const state={page:'overview',queue:[],queueIndex:-1,source:null,running:false,paused:false,model:null,modelStatus:'Not loaded',modelVersion:'COCO-SSD lite MobileNet v2',failure:null,frames:0,fps:0,latency:null,lastInference:0,lastFrameAt:0,lastSampleAt:0,detected:[],tracks:new Map(),nextTrackId:1,heat:Array(96).fill(0),events:[],insights:[],samples:[],buffer:[],lastOutbound:null,lastSuccessfulEvent:null,privacyViolations:0,zones:[],selectedZone:null,refs:new Map(),shelfPercents:new Map(),previousVectors:new Map(),lastStockStates:new Map(),queueCounts:new Map(),footfallIds:new Set(),dwellSamples:[],visitsByTrack:new Map(),visitEvidence:new Map(),visitSnapshot:{activeCount:0,opened:0,exited:0,expired:0,active:[]},guideStep:0,syntheticPercent:100,syntheticTimers:[],generation:0};
 const availableRecordingIds=new Set(),lastQueueIndex={entry:-1,shelf:-1};
-const visitLog=[];let visitNumber=0;
+const visitLog=[];let visitNumber=0;const unmatchedExitIds=new Set();
 const storeSummary={shelfPercent:null,shelfSimulated:false};
-const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,visitSample:!!entry.visitSample,visitZones:entry.visitZones,detail:entry.detail});
+const recordingItem=entry=>({name:entry.title,recordingId:entry.id,url:'/recordings/'+entry.file,kind:'included',purpose:entry.purpose,preset:entry.calibration||null,visitSample:!!entry.visitSample,exitOnly:!!entry.exitOnly,visitZones:entry.visitZones,detail:entry.detail});
 const sourcePurpose=item=>item?.purpose||(item?.visitSample?'entry':'shelf');
 let zoneCounter=1,eventCounter=1,inferenceBusy=false;
 const videoReady=()=>state.source?.kind!=='synthetic'&&video.readyState>=2;
@@ -98,7 +100,7 @@ function renderCanvas(){for(const [key,ctx] of Object.entries(contexts))drawFram
 
 function clearTimers(){for(const timer of state.syntheticTimers)clearTimeout(timer);state.syntheticTimers=[];}
 function resetAnalysis(keepQueue=true,clearVisitStore=true){
-  state.generation++;clearTimers();state.running=false;state.paused=false;video.pause();
+  state.generation++;clearTimers();state.running=false;state.paused=false;video.pause();unmatchedExitIds.clear();
   state.frames=0;state.fps=0;state.latency=null;state.lastInference=0;state.lastFrameAt=0;state.lastSampleAt=0;state.detected=[];state.tracks.clear();state.nextTrackId=1;state.heat.fill(0);state.events=[];state.selectedEvidence=null;state.insights=[];state.samples=[];state.buffer=[];state.lastOutbound=null;state.lastSuccessfulEvent=null;state.privacyViolations=0;state.previousVectors.clear();state.shelfPercents.clear();state.lastStockStates.clear();state.queueCounts.clear();state.footfallIds.clear();state.dwellSamples=[];state.visitsByTrack.clear();if(clearVisitStore){state.visitEvidence.clear();state.visitSnapshot={activeCount:0,opened:0,exited:0,expired:0,active:[]};void clearVisits();}state.failure=null;state.guideStep=0;cooldown.clear();
   if(!keepQueue){for(const item of state.queue)if(item.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);state.queue=[];state.queueIndex=-1;lastQueueIndex.entry=-1;lastQueueIndex.shelf=-1;state.source=null;video.removeAttribute('src');video.load();state.refs.clear();}
   renderAll();
@@ -187,7 +189,7 @@ function loadSource(index){
   if(index<0||index>=state.queue.length)return;
   const next=state.queue[index],purpose=sourcePurpose(next);
   resetAnalysis(true,false);state.refs.clear();state.queueIndex=index;state.source=next;state.source.status='Loaded';lastQueueIndex[purpose]=index;
-  if(purpose==='entry'){state.zones=['entrance','exit'].map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=next.visitZones?.[type]||(type==='entrance'?[.2,.35,.25,.6]:[.56,.35,.25,.6]);return zone;});state.selectedZone=state.zones[0].id;}
+  if(purpose==='entry'){state.zones=(next.exitOnly?['exit']:['entrance','exit']).map(type=>{const zone=zoneDefaults(type);[zone.x,zone.y,zone.w,zone.h]=next.visitZones?.[type]||(type==='entrance'?[.2,.35,.25,.6]:[.56,.35,.25,.6]);return zone;});state.selectedZone=state.zones[0].id;}
   else {state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;}
   renderZones();video.src=state.source.url;video.load();$('sessionName').textContent=state.source.name;$('recordingDetail').textContent=state.source.detail||'Local video selected in this browser.';$('visitsSourceNote').textContent=purpose==='entry'?'Doorway zones are estimates. The clip may show entrances without the same person leaving. Exits count only when one continuous temporary track crosses the Exit zone.':'Load a doorway recording on Entry & Exit to count visits.';renderRecordingOptions(purpose);for(const card of document.querySelectorAll('.recording-card'))card.classList.toggle('selected',card.dataset.recordingId===next.recordingId);status('Video loaded. Configure zones, then start local analysis.');renderAll();
 }
@@ -258,11 +260,19 @@ async function closeVisit(track,zone){
   const pending=state.visitsByTrack.get(track.id);if(!pending)return;state.visitsByTrack.delete(track.id);
   try{const visitId=await pending;if(!visitId)return;await visitRequest('/api/visits/close',{type:'visit_close',visitId});state.visitEvidence.delete(visitId);const row=visitLog.find(item=>item.visitId===visitId);if(row){row.exitedAt=new Date();row.status='Exited';delete row.visitId;}addEvent('PERSON_EXITED',zone,track.score,1,'The same temporary track crossed the configured exit zone; its server record was deleted.','Observed exit-zone transition; matching anonymous visit token removed.');await fetchVisits();}catch{status('Exit crossing seen, but the visit record could not be deleted. It will expire automatically.','warning');}
 }
+function observeUnmatchedExit(track){
+  if(unmatchedExitIds.has(track.id))return;
+  unmatchedExitIds.add(track.id);
+  visitLog.unshift({number:++visitNumber,enteredAt:null,exitedAt:new Date(),entryTime:currentMediaTime(),sourceId:state.source?.id,status:'Exit seen · no matching entry'});
+  if(visitLog.length>100)visitLog.length=100;
+  renderVisits();
+}
 function renderVisits(){
   const visits=state.visitSnapshot;
   $('entryInside').textContent=String(visits.activeCount);$('entryEntered').textContent=String(visits.opened);$('entryExited').textContent=String(visits.exited);$('entryTimedOut').textContent=String(visits.expired);
   const activeIds=new Set(visits.active.map(item=>item.visitId));for(const item of visitLog)if(item.status==='Inside'&&!activeIds.has(item.visitId)){item.status='Timed out or reset';delete item.visitId;}
-  const table=$('entryTableRows');table.replaceChildren();if(!visitLog.length){const row=document.createElement('tr'),cell=node('td','No observed entries yet. Start a doorway video.');cell.colSpan=5;row.append(cell);table.append(row);}else for(const item of visitLog.slice(0,30)){const row=document.createElement('tr');for(const value of [`Visit ${item.number}`,item.enteredAt.toLocaleTimeString(),item.exitedAt?.toLocaleTimeString()||'—',item.status])row.append(node('td',value));const cell=document.createElement('td');if(item.sourceId===state.source?.id){const button=node('button',`Video ${formatTime(item.entryTime)}`);button.onclick=()=>showVideoMoment(item.entryTime);cell.append(button);}else cell.textContent='Previous video';row.append(cell);table.append(row);}
+  $('exitOnlyCount').textContent=state.source?.exitOnly?`${visitLog.filter(item=>item.sourceId===state.source?.id&&item.status.startsWith('Exit seen')).length} exit-only observations in this video. These do not reduce the inside count because no matching entry was seen.`:'';
+  const table=$('entryTableRows');table.replaceChildren();if(!visitLog.length){const row=document.createElement('tr'),cell=node('td','No observed crossings yet. Start a doorway video.');cell.colSpan=5;row.append(cell);table.append(row);}else for(const item of visitLog.slice(0,30)){const row=document.createElement('tr');for(const value of [`${item.enteredAt?'Visit':'Exit observation'} ${item.number}`,item.enteredAt?.toLocaleTimeString()||'—',item.exitedAt?.toLocaleTimeString()||'—',item.status])row.append(node('td',value));const cell=document.createElement('td');if(item.sourceId===state.source?.id){const button=node('button',`Video ${formatTime(item.entryTime)}`);button.onclick=()=>showVideoMoment(item.entryTime);cell.append(button);}else cell.textContent='Previous video';row.append(cell);table.append(row);}
   $('visitsActive').textContent=String(visits.activeCount);
   $('visitsOpened').textContent=String(visits.opened);
   $('visitsExited').textContent=String(visits.exited);
@@ -300,7 +310,8 @@ function analyzePeople(detections){
   for(const track of state.tracks.values()){
     const zone=zoneById(track.zoneId);if(!zone)continue;
     const hx=Math.min(11,Math.floor(track.x*12)),hy=Math.min(7,Math.floor(track.y*8));state.heat[hy*12+hx]++;
-    if(changed.has(track.id)&&state.zones.some(z=>z.type==='entrance')&&state.zones.some(z=>z.type==='exit')){
+    if(changed.has(track.id)&&state.source?.exitOnly&&zone.type==='exit'&&previousZones.has(track.id)&&previousZones.get(track.id)!==zone.id){observeUnmatchedExit(track);}
+    if(changed.has(track.id)&&!state.source?.exitOnly&&state.zones.some(z=>z.type==='entrance')&&state.zones.some(z=>z.type==='exit')){
       const previousType=zoneById(previousZones.get(track.id))?.type||null;
       const transition=visitTransition(previousType,zone.type,previousZones.has(track.id),state.visitsByTrack.has(track.id));
       if(transition==='enter')openVisit(track,zone);
