@@ -2,7 +2,7 @@
 
 ShelfSentinel is a privacy-first store operations dashboard for the Flo 2026 hackathon. It helps staff estimate store presence, spot shelves that need attention, and respond to checkout congestion from video. Video analysis runs in the browser. The app keeps only limited, anonymous operational data in the local server's memory.
 
-For the implementation, technology stack, processing stages, and privacy boundary, see [Architecture and technology stack](docs/ARCHITECTURE.md).
+For the implementation, technology stack, processing stages, and privacy boundary, see [Architecture and technology stack](docs/ARCHITECTURE.md). For the presentation diagram and system flow, see [High-level architecture](docs/HIGH_LEVEL_ARCHITECTURE.md).
 
 ## The idea in one minute
 
