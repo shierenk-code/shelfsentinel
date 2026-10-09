@@ -7,7 +7,7 @@ import {loadLocalDetector} from './model-bundle.mjs';
 const $=id=>document.getElementById(id),video=$('videoElement');
 const dashboard=document.querySelector('main');
 const overviewBrief=document.createElement('div');overviewBrief.className='overview-simple';
-overviewBrief.innerHTML='<div class="store-heading"><div><p class="eyebrow">NOIDA · GIP MALL / STORE COMMAND CENTER</p><h1>One view. Every store signal.</h1><p>Select one recording, start local analysis, and get an operational snapshot for the floor team.</p></div><strong id="storeDate"></strong></div><div class="summary-grid"><article class="summary-card"><span>People inside now</span><strong id="briefInside">0</strong><small>Anonymous temporary visits</small></article><article class="summary-card"><span>Entries observed</span><strong id="briefEntries">0</strong><small>Matched doorway crossings</small></article><article class="summary-card"><span>Exits observed</span><strong id="briefExits">0</strong><small>Records removed on exit</small></article><article class="summary-card"><span>Shelf / checkout</span><strong id="briefShelf">Ready</strong><small id="briefShelfNote">Choose a recording below</small></article></div><div class="overview-simple-grid"><article class="panel command-story"><span class="eyebrow">LIVE OPERATING LOOP</span><h2>Observe → understand → act</h2><p id="briefActivity">Choose a recording below. The selected clip becomes the evidence for the cards and activity timeline.</p><div class="story-steps"><span>01 <b>Anonymous detection</b></span><span>02 <b>Store signal</b></span><span>03 <b>Staff action</b></span></div></article><article class="panel"><span class="eyebrow">PRIVACY PROMISE</span><h2>Useful without identifying people</h2><p>Temporary visit tokens are held in local memory. When a person exits, the matching record is deleted automatically.</p><div class="privacy-chip-row"><span>NO FACES</span><span>NO NAMES</span><span>LOCAL VIDEO</span></div></article></div><p class="overview-privacy-note">This demo is designed for a retailer: one recording, one analysis run, clear evidence, and an action the team can understand.</p>';
+overviewBrief.innerHTML='<div class="store-heading"><div><p class="eyebrow">STORE OVERVIEW</p><h1>ShelfSentinel Store</h1><p>Today at the store · anonymous doorway counts and visual shelf checks</p></div><strong id="storeDate"></strong></div><div class="summary-grid"><article class="summary-card"><span>People inside now</span><strong id="briefInside">0</strong><small>Estimated from active visit records</small></article><article class="summary-card"><span>Entries observed</span><strong id="briefEntries">0</strong><small>Current server session</small></article><article class="summary-card"><span>Exits observed</span><strong id="briefExits">0</strong><small>Matched crossings</small></article><article class="summary-card"><span>Saved active records</span><strong id="briefRecords">0</strong><small>Deleted on exit or timeout</small></article></div><div class="overview-simple-grid"><article class="panel"><h2>Store activity today</h2><p id="briefActivity">No doorway activity analyzed yet.</p><button data-go="entry">View entry &amp; exit →</button></article><article class="panel"><h2>Inventory at a glance</h2><div class="overview-inventory-row"><span>Monitored shelf</span><strong id="briefShelf">Awaiting analysis</strong></div><p id="briefShelfNote">Analyze a calibrated shelf video to estimate visible stock.</p><button data-go="shelf">View shelf maintenance →</button></article></div><p class="overview-privacy-note">Video is analyzed locally. Active visit records contain anonymous tokens and expire automatically.</p>';
 $('overview').prepend(overviewBrief);
 const entryPage=document.createElement('section');entryPage.id='entry';entryPage.className='page';
 entryPage.innerHTML='<div class="page-heading"><p class="eyebrow">STORE PRESENCE</p><h1>Entry &amp; Exit</h1><p>Choose a doorway video and start analysis. The table records observed entries and matched exits.</p></div><div class="panel recording-library"><h2>Doorway recordings</h2><div id="entryClipList" class="recording-grid"></div></div><div class="summary-grid workflow-stats"><article class="summary-card"><span>Inside now</span><strong id="entryInside">0</strong></article><article class="summary-card"><span>Entries</span><strong id="entryEntered">0</strong></article><article class="summary-card"><span>Exits</span><strong id="entryExited">0</strong></article><article class="summary-card"><span>Timed out</span><strong id="entryTimedOut">0</strong></article></div><div class="panel"><h2>Entry &amp; exit records</h2><p class="subtle">Only observed crossings appear. A matched exit removes the active server record; this table shows an anonymous session log.</p><div class="table-wrap"><table><thead><tr><th>Visit</th><th>Entry</th><th>Exit</th><th>Status</th><th>Evidence</th></tr></thead><tbody id="entryTableRows"><tr><td colspan="5">Start a doorway video to see observed entries.</td></tr></tbody></table></div></div>';
@@ -62,11 +62,9 @@ function showPage(page){
   const tab=page==='overview'||page==='privacy'?'overview':page==='entry'||page==='visits'?'entry':page==='checkout'?'checkout':page==='shelf'||['zones','events','operations','insights','recovery'].includes(page)?'shelf':sourcePurpose(state.source)==='entry'?'entry':'shelf';
   state.page=tab;
   if(tab==='entry'||tab==='shelf'||tab==='checkout'){renderRecordingOptions(tab);ensureSourceForTab(tab);}
-  if(tab==='overview')renderRecordingOptions('all');
   if(tab==='entry')entryPage.insertBefore($('video'),entryPage.querySelector('.workflow-stats'));
   if(tab==='shelf')shelfPage.insertBefore($('video'),shelfPage.querySelector('.shelf-settings'));
   if(tab==='checkout')checkoutPage.insertBefore($('video'),checkoutPage.querySelector('.workflow-stats'));
-  if(tab==='overview')overview.append($('video'));
   if(page==='zones')advancedZone.open=true;
   $('video').classList.toggle('entry-mode',tab==='entry');
   $('video').querySelector('h1').textContent=tab==='entry'?'Doorway video analyzer':tab==='checkout'?'Checkout video analyzer':'Shelf video analyzer';
@@ -157,10 +155,10 @@ function activateRecording(entry){const existing=state.queue.findIndex(item=>ite
 function renderRecordingOptions(purpose){
   const select=$('includedSelect'),current=state.source?.recordingId;
   select.replaceChildren();
-  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=purpose==='entry'?'Choose doorway video':purpose==='checkout'?'Choose checkout video':purpose==='shelf'?'Choose shelf video':'Choose a store recording';select.append(placeholder);
-  for(const entry of recordings.filter(item=>(purpose==='all'||item.purpose===purpose)&&availableRecordingIds.has(item.id))){const option=document.createElement('option');option.value=entry.id;option.textContent=`${entry.title} · ${entry.purpose==='entry'?'Entry / exit':entry.purpose==='checkout'?'Checkout':'Shelf'}`;select.append(option);}
-  select.value=current&&recordings.some(item=>item.id===current&&(purpose==='all'||item.purpose===purpose))?current:'';
-  $('includedLabel').textContent=purpose==='entry'?'Doorway recording':purpose==='checkout'?'Checkout recording':purpose==='shelf'?'Shelf recording':'Store recording';
+  const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent=purpose==='entry'?'Choose doorway video':purpose==='checkout'?'Choose checkout video':'Choose shelf video';select.append(placeholder);
+  for(const entry of recordings.filter(item=>item.purpose===purpose&&availableRecordingIds.has(item.id))){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.title;select.append(option);}
+  select.value=current&&recordings.some(item=>item.id===current&&item.purpose===purpose)?current:'';
+  $('includedLabel').textContent=purpose==='entry'?'Doorway recording':purpose==='checkout'?'Checkout recording':'Shelf recording';
 }
 function ensureSourceForTab(purpose){
   if(sourcePurpose(state.source)===purpose&&state.source)return;
@@ -171,7 +169,7 @@ function ensureSourceForTab(purpose){
   if(entry)activateRecording(entry);
   else{state.running=false;video.pause();video.removeAttribute('src');video.load();state.source=null;$('sessionName').textContent='No video selected';renderAll();}
 }
-function loadSelectedRecording(){const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry||!availableRecordingIds.has(id))return status('Choose an available recording.','warning');activateRecording(entry);showPage('overview');status(`${entry.title} loaded. Press Start Analysis.`);}
+function loadSelectedRecording(){const id=$('includedSelect').value,entry=recordings.find(item=>item.id===id);if(!entry||!availableRecordingIds.has(id))return status('Choose an available recording for this page.','warning');if(entry.purpose!==state.page)return status('This recording belongs to the other use case.','warning');activateRecording(entry);status(`${entry.title} loaded. Press Start Analysis.`);}
 $('videoFiles').onchange=()=>{for(const file of $('videoFiles').files){if(!/\.(mp4|webm)$/i.test(file.name))continue;addQueueItem({name:file.name,url:URL.createObjectURL(file),kind:'local',purpose:['entry','shelf','checkout'].includes(state.page)?state.page:'shelf'});}$('videoFiles').value='';};
 $('includedSelect').onchange=loadSelectedRecording;
 $('addIncluded').textContent='Reload selected video';$('addIncluded').onclick=loadSelectedRecording;
@@ -194,7 +192,7 @@ async function loadIncludedLibrary(){
     const response=await fetch('/api/recordings');if(!response.ok)throw Error('Recording library unavailable');
     const data=await response.json();for(const id of data.available)availableRecordingIds.add(id);
     renderRecordingCards('entry');renderRecordingCards('shelf');renderRecordingCards('checkout');
-    renderRecordingOptions(['entry','shelf','checkout'].includes(state.page)?state.page:'all');
+    renderRecordingOptions(['entry','shelf','checkout'].includes(state.page)?state.page:'shelf');
     if(['entry','shelf','checkout'].includes(state.page))ensureSourceForTab(state.page);
   }catch{status('Included recording library unavailable. Upload a local file or run the synthetic demo.','warning');}
 }
@@ -486,5 +484,5 @@ $('privacyProbe').onclick=async()=>{const invalid={type:'retail_signal',shelf_id
 const failureMessages={camera:'Camera lost: video analysis paused. No new frame events are generated.',model:'Model failure: person and queue detections stop. Calibrated shelf comparison can continue.',stream:'Event stream offline: validated events buffer locally until restored.',network:'Network disconnected: validated events buffer locally until restored.',privacy:'Privacy filter unavailable: outbound events are blocked.',corrupt:'Corrupt video: analysis stopped. Choose another recording.'};
 for(const button of document.querySelectorAll('[data-failure]'))button.onclick=()=>{state.failure=button.dataset.failure;if(['camera','corrupt'].includes(state.failure)){state.running=false;video.pause();}if(state.failure==='model'){state.model=null;state.modelStatus='Unavailable: simulated model failure';state.detected=[];state.tracks.clear();}$('recoveryResult').textContent=`SIMULATED FAILURE · ${failureMessages[state.failure]}`;renderAll();};
 $('restoreSystem').onclick=()=>{const previous=state.failure;state.failure=null;if(previous==='model')state.modelStatus='Not loaded · start analysis to reload';$('recoveryResult').textContent='System restored. Buffered anonymous events are being delivered to the local receiver.';void flushBuffer();renderAll();};
-state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;renderZones();renderAll();renderCanvas();showPage('overview');void loadIncludedLibrary();void fetchVisits();
+state.zones=[zoneDefaults('shelf')];state.selectedZone=state.zones[0].id;renderZones();renderAll();renderCanvas();void loadIncludedLibrary();void fetchVisits();
 
