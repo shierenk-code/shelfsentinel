@@ -1,6 +1,20 @@
 # ShelfSentinel
 
-A privacy-first retail analytics prototype for the Flo 2026 hackathon. One local video session powers shelf observations, temporary person detection, anonymous operational events, evidence, metrics, and recommended actions.
+ShelfSentinel is a privacy-first store operations dashboard for the Flo 2026 hackathon. It helps staff answer two practical questions from store video: **How many people appear to be inside?** and **Does a shelf need attention?** Video analysis runs in the browser. The app keeps only limited, anonymous operational data in the local server's memory.
+
+## The idea in one minute
+
+A store camera can help staff react to busy entrances and low-stock shelves, but storing customer video or identifying shoppers creates a privacy problem. ShelfSentinel turns video into short-lived observations instead of customer profiles:
+
+1. A staff member chooses a doorway or shelf recording on its matching page and starts analysis.
+2. The browser detects people and objects and checks configured doorway or shelf zones.
+3. **Entry & Exit** estimates arrivals, departures, and people inside. An observed arrival opens a temporary anonymous visit record. A matched departure deletes it; a missed departure expires after two minutes.
+4. **Shelf Maintenance** estimates visible shelf occupancy and raises a low-stock signal against a staff-set limit. It shows the relevant moment in the video and a suggested action.
+5. **Overview** brings the latest store signals together so staff can decide where to look next.
+
+**Example:** If a person crosses the entrance zone, the estimated inside count increases. If the same temporary track later crosses the exit zone, its visit record is removed. If a shelf drops below the chosen limit, the shelf page recommends checking or restocking it.
+
+This is a working prototype, not a shopper identity system or an exact inventory counter. The included doorway clips do not establish a complete entry-to-exit journey, and most shelf clips need calibration before an occupancy estimate is meaningful.
 
 ## Run
 
