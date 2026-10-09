@@ -115,3 +115,4 @@ body.dark .overview-health-card{background:linear-gradient(135deg,#0a281d,#184d3
 #overview .overview-simple-grid{margin-top:0}.overview-simple-grid .command-story{background:linear-gradient(135deg,#0d332a,#1b5b43);color:#effcf4;border-color:#205e48}.overview-simple-grid .command-story p{color:#cde4d4}
 .sidebar nav .nav:not([data-target="overview"]){display:block}
 @media(max-width:900px){.overview-cinema{grid-template-columns:1fr}.cinema-brief{min-height:240px}.overview-cinema #video>.two>.panel:first-child .stage{min-height:0}#overviewScenarioLabel{margin-left:0}}
+.cinema-activity{margin:18px 0 0;padding:10px 0;border-top:1px solid #ffffff33;border-bottom:1px solid #ffffff33;color:#c4ded0;font-size:11px;line-height:1.8}.cinema-activity div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
